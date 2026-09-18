@@ -66,6 +66,7 @@ export const TransportToolbar: React.FC<TransportToolbarProps> = () => {
     setLoopActive,
     metronomeActive,
     setMetronomeActive,
+    toggleLayoutMode,
     addLine,
     removeLine,
     addMeasure,
@@ -299,6 +300,24 @@ export const TransportToolbar: React.FC<TransportToolbarProps> = () => {
           title="Eraser Tool (Click notes to erase)"
         >
           <Eraser size={16} />
+        </IconButton>
+      </SectionGroup>
+
+      <Divider />
+
+      {/* Staff Layout Toggle (Single Melody vs Piano Grand Staff) */}
+      <SectionGroup>
+        <IconButton
+          $active={score.layoutMode === 'grand'}
+          onClick={toggleLayoutMode}
+          style={{ width: 'auto', padding: '0 10px', fontSize: '0.8rem', fontWeight: 600, gap: 5 }}
+          title={
+            score.layoutMode === 'grand'
+              ? 'Switch to Single Melody Staff (Lead Sheet)'
+              : 'Switch to Grand Staff (Piano Right & Left Hand)'
+          }
+        >
+          <span>{score.layoutMode === 'grand' ? '🎹 Grand Staff' : '🎼 Single Staff'}</span>
         </IconButton>
       </SectionGroup>
 

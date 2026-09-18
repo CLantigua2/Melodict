@@ -41,6 +41,8 @@ export interface ScoreLine {
   measures: Measure[];
 }
 
+export type ScoreLayoutMode = 'single' | 'grand';
+
 export interface Score {
   id: string;
   title: string;
@@ -50,6 +52,7 @@ export interface Score {
   timeSignatureDenominator: number;
   keySignature: string; // e.g. "C", "G", "F", "D"
   instrumentId: InstrumentId;
+  layoutMode?: ScoreLayoutMode; // 'single' = Lead Sheet / Melody, 'grand' = Piano Grand Staff (RH & LH)
   lines: ScoreLine[];
   measures: Measure[];
   createdAt: string;
@@ -64,6 +67,7 @@ export interface CreateScoreDTO {
   timeSignatureDenominator?: number;
   keySignature?: string;
   instrumentId?: InstrumentId;
+  layoutMode?: ScoreLayoutMode;
   lines?: ScoreLine[];
   measures?: Measure[];
 }

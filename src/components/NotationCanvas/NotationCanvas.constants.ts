@@ -6,7 +6,10 @@ export const STEM_HEIGHT = 40;
 export const MEASURE_WIDTH = 260;     // default width per measure
 export const CLEF_WIDTH = 110;        // width of clef + key signature + time signature area
 export const STAFF_PADDING_TOP = 80;  // ample headroom above first staff line
-export const LINE_HEIGHT = 180;       // vertical distance between each staff line system
+export const LINE_HEIGHT = 180;       // vertical distance between single staff line systems
+export const GRAND_LINE_HEIGHT = 300; // vertical distance between grand staff systems
+export const GRAND_STAFF_GAP = 70;    // vertical gap between Treble bottom line and Bass top line
+export const STAFF_HEIGHT = LINE_SPACING * 4; // 56px
 export const STAFF_GAP = 90;
 
 export interface KeySignatureDef {
@@ -15,19 +18,20 @@ export interface KeySignatureDef {
   count: number;
   alteredNotes: string[]; // Note letters that are altered, e.g. ['F', 'C']
   trebleSteps: number[];  // Diatonic steps from top line for each glyph in standard engraving order
+  bassSteps: number[];    // Diatonic steps from top line for bass staff
 }
 
 export const KEY_SIGNATURE_MAP: Record<string, KeySignatureDef> = {
-  C: { key: 'C', type: 'none', count: 0, alteredNotes: [], trebleSteps: [] },
-  Am: { key: 'Am', type: 'none', count: 0, alteredNotes: [], trebleSteps: [] },
-  G: { key: 'G', type: 'sharp', count: 1, alteredNotes: ['F'], trebleSteps: [0] }, // F5 (top line = step 0)
-  D: { key: 'D', type: 'sharp', count: 2, alteredNotes: ['F', 'C'], trebleSteps: [0, 3] }, // F5, C5
-  A: { key: 'A', type: 'sharp', count: 3, alteredNotes: ['F', 'C', 'G'], trebleSteps: [0, 3, -1] }, // F5, C5, G5
-  E: { key: 'E', type: 'sharp', count: 4, alteredNotes: ['F', 'C', 'G', 'D'], trebleSteps: [0, 3, -1, 2] }, // F5, C5, G5, D5
-  F: { key: 'F', type: 'flat', count: 1, alteredNotes: ['B'], trebleSteps: [4] }, // B4 (middle line = step 4)
-  Bb: { key: 'Bb', type: 'flat', count: 2, alteredNotes: ['B', 'E'], trebleSteps: [4, 1] }, // B4, E5
-  Eb: { key: 'Eb', type: 'flat', count: 3, alteredNotes: ['B', 'E', 'A'], trebleSteps: [4, 1, 5] }, // B4, E5, A4
-  Ab: { key: 'Ab', type: 'flat', count: 4, alteredNotes: ['B', 'E', 'A', 'D'], trebleSteps: [4, 1, 5, 2] }, // B4, E5, A4, D5
+  C: { key: 'C', type: 'none', count: 0, alteredNotes: [], trebleSteps: [], bassSteps: [] },
+  Am: { key: 'Am', type: 'none', count: 0, alteredNotes: [], trebleSteps: [], bassSteps: [] },
+  G: { key: 'G', type: 'sharp', count: 1, alteredNotes: ['F'], trebleSteps: [0], bassSteps: [2] }, // F5 / F3
+  D: { key: 'D', type: 'sharp', count: 2, alteredNotes: ['F', 'C'], trebleSteps: [0, 3], bassSteps: [2, 5] }, // F, C
+  A: { key: 'A', type: 'sharp', count: 3, alteredNotes: ['F', 'C', 'G'], trebleSteps: [0, 3, -1], bassSteps: [2, 5, 1] }, // F, C, G
+  E: { key: 'E', type: 'sharp', count: 4, alteredNotes: ['F', 'C', 'G', 'D'], trebleSteps: [0, 3, -1, 2], bassSteps: [2, 5, 1, 4] }, // F, C, G, D
+  F: { key: 'F', type: 'flat', count: 1, alteredNotes: ['B'], trebleSteps: [4], bassSteps: [6] }, // Bb4 / Bb2
+  Bb: { key: 'Bb', type: 'flat', count: 2, alteredNotes: ['B', 'E'], trebleSteps: [4, 1], bassSteps: [6, 3] }, // Bb, Eb
+  Eb: { key: 'Eb', type: 'flat', count: 3, alteredNotes: ['B', 'E', 'A'], trebleSteps: [4, 1, 5], bassSteps: [6, 3, 7] }, // Bb, Eb, Ab
+  Ab: { key: 'Ab', type: 'flat', count: 4, alteredNotes: ['B', 'E', 'A', 'D'], trebleSteps: [4, 1, 5, 2], bassSteps: [6, 3, 7, 4] }, // Bb, Eb, Ab, Db
 };
 
 export const TIME_SIGNATURES = [

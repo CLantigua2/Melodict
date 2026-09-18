@@ -4,6 +4,9 @@ import {
   STEP_Y,
   STAFF_PADDING_TOP,
   LINE_HEIGHT,
+  GRAND_LINE_HEIGHT,
+  GRAND_STAFF_GAP,
+  STAFF_HEIGHT,
   CLEF_WIDTH,
   MEASURE_WIDTH,
   NOTEHEAD_RX,
@@ -209,11 +212,13 @@ export function findNextNoteWithPitch(
   note: ScoreNote
 ): { note: ScoreNote; x: number; y: number; isSameLine: boolean } | null {
   const allLines = score.lines || [];
+  const isGrandStaff = score.layoutMode === 'grand';
+  const systemHeight = isGrandStaff ? GRAND_LINE_HEIGHT : LINE_HEIGHT;
   let foundCurrent = false;
 
   for (const line of allLines) {
     const beatsPerMeasure = line.timeSignatureNumerator * (4 / line.timeSignatureDenominator);
-    const lineStaffTop = STAFF_PADDING_TOP + line.lineIndex * LINE_HEIGHT;
+    const systemTop = STAFF_PADDING_TOP + line.lineIndex * systemHeight;
 
     for (let mOffset = 0; mOffset < line.measures.length; mOffset++) {
       const measure = line.measures[mOffset];
@@ -227,7 +232,11 @@ export function findNextNoteWithPitch(
 
         if (foundCurrent && n.pitch === note.pitch && !n.isRest) {
           const x = measureLeft + (n.beatPosition / beatsPerMeasure) * (MEASURE_WIDTH - 30) + 15;
-          const y = calculateNoteY(n.pitch, lineStaffTop, line.clef);
+          const staffTop =
+            isGrandStaff && n.clef === 'bass'
+              ? systemTop + STAFF_HEIGHT + GRAND_STAFF_GAP
+              : systemTop;
+          const y = calculateNoteY(n.pitch, staffTop, n.clef);
           const isSameLine = n.lineIndex === note.lineIndex;
           return { note: n, x, y, isSameLine };
         }

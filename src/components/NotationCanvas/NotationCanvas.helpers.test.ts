@@ -90,4 +90,19 @@ describe('NotationCanvas helpers', () => {
     expect(tiePath).toContain('M ');
     expect(tiePath).toContain('Q ');
   });
+
+  it('calculates note Y and ledger lines correctly for bass clef', () => {
+    // A3 is top line of bass clef (step 0)
+    expect(calculateNoteY('A3', STAFF_PADDING_TOP, 'bass')).toBe(STAFF_PADDING_TOP);
+    // Middle C (C4) on bass clef is step -2 (1 ledger line above staff)
+    expect(calculateNoteY('C4', STAFF_PADDING_TOP, 'bass')).toBe(STAFF_PADDING_TOP - 2 * STEP_Y);
+    const c4BassLedgers = getLedgerLines('C4', STAFF_PADDING_TOP, 'bass');
+    expect(c4BassLedgers.length).toBe(1);
+    expect(c4BassLedgers[0]).toBe(STAFF_PADDING_TOP - 2 * STEP_Y);
+
+    // Stem directions on bass clef (middle line is D3, step 4)
+    expect(getStemDirection('C3', 'bass')).toBe('up');
+    expect(getStemDirection('D3', 'bass')).toBe('down');
+    expect(getStemDirection('F3', 'bass')).toBe('down');
+  });
 });

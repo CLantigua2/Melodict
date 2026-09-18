@@ -1,4 +1,4 @@
-import { ScoreNote } from '@/types/score.types';
+import { ScoreNote, ClefType } from '@/types/score.types';
 
 export interface NotationCanvasProps {
   className?: string;
@@ -10,6 +10,7 @@ export interface GhostNoteState {
   measureIndex: number;
   beatPosition: number;
   pitch: string;
+  clef?: ClefType;
   x: number;
   y: number;
 }

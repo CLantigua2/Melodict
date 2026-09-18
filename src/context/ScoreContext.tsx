@@ -74,6 +74,7 @@ export interface ScoreContextType {
   createNewScore: () => void;
   closeScore: (id: string) => void;
   updateScoreMeta: (meta: Partial<Score>) => void;
+  toggleLayoutMode: () => void;
   addNote: (
     measureIndex: number,
     beatPosition: number,
@@ -90,7 +91,8 @@ export interface ScoreContextType {
     targetMeasureIndex: number,
     targetBeatPosition: number,
     newPitch: string,
-    targetLineIndex?: number
+    targetLineIndex?: number,
+    newClef?: ClefType
   ) => void;
   moveSelectedNotePitch: (semitoneDelta: number) => void;
   moveSelectedNoteBeat: (beatDelta: number) => void;
@@ -132,6 +134,7 @@ export function useScore(): ScoreContextType {
 }
 
 function normalizeScore(raw: Score): Score {
+  const layoutMode = raw.layoutMode || 'single';
   if (raw.lines && raw.lines.length > 0) {
     const syncedLines = raw.lines.map((l, lIdx) => ({
       ...l,
@@ -144,6 +147,7 @@ function normalizeScore(raw: Score): Score {
     }));
     return {
       ...raw,
+      layoutMode,
       lines: syncedLines,
       measures: syncedLines.flatMap((l) => l.measures),
     };
@@ -178,6 +182,7 @@ function normalizeScore(raw: Score): Score {
 
   return {
     ...raw,
+    layoutMode,
     lines,
     measures: lines.flatMap((l) => l.measures),
   };
@@ -387,6 +392,19 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     });
   };
 
+  const toggleLayoutMode = useCallback(() => {
+    setScore((prev) => {
+      const nextMode = prev.layoutMode === 'grand' ? 'single' : 'grand';
+      const next = normalizeScore({
+        ...prev,
+        layoutMode: nextMode,
+        updatedAt: new Date().toISOString(),
+      });
+      pushHistory(next);
+      return next;
+    });
+  }, [pushHistory]);
+
   const loadScoreById = (id: string) => {
     const found = scoresList.find((s) => s.id === id);
     if (found) {
@@ -495,7 +513,8 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     targetMeasureIndex: number,
     targetBeatPosition: number,
     newPitch: string,
-    targetLineIndex?: number
+    targetLineIndex?: number,
+    newClef?: ClefType
   ) => {
     setScore((prev) => {
       let foundNote: ScoreNote | undefined;
@@ -528,7 +547,7 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           ? updatedLines[targetLineIndex]
           : updatedLines.find((l) => l.measures.some((m) => m.index === targetMeasureIndex));
       const resolvedLineIdx = targetLine ? targetLine.lineIndex : noteToMove.lineIndex ?? 0;
-      const resolvedClef = targetLine?.clef || noteToMove.clef || 'treble';
+      const resolvedClef = newClef || targetLine?.clef || noteToMove.clef || 'treble';
 
       const updatedNote: ScoreNote = {
         ...noteToMove,
@@ -1359,6 +1378,7 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         createNewScore,
         closeScore,
         updateScoreMeta,
+        toggleLayoutMode,
         addNote,
         deleteNote,
         deleteSelectedNote,

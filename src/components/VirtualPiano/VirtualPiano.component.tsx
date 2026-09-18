@@ -66,11 +66,17 @@ export const VirtualPiano: React.FC<VirtualPianoProps> = ({ onKeyClick }) => {
     } else if (activeTool === 'input') {
       // Place note onto score at current measure/beat!
       const targetLine = score.lines[playheadLine] || score.lines[0];
+      const targetClef =
+        score.layoutMode === 'grand'
+          ? midi < 60
+            ? 'bass'
+            : 'treble'
+          : targetLine?.clef || 'treble';
       addNote(
         playheadMeasure,
         playheadBeat,
         pitch,
-        targetLine?.clef || 'treble',
+        targetClef,
         playheadLine
       );
     }
