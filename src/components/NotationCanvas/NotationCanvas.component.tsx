@@ -1,16 +1,19 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Plus,
   Trash2,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   X,
   Music,
 } from 'lucide-react';
 import { useScore } from '@/context/ScoreContext';
 import { useAppTheme } from '@/theme/ThemeProvider';
+import { ScoreNote } from '@/types/score.types';
 import {
   LINE_SPACING,
   STEP_Y,
@@ -70,7 +73,9 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
     updateNote,
     updateSelectedNote,
     updateScoreMeta,
+    moveNote,
     moveSelectedNotePitch,
+    moveSelectedNoteBeat,
     addChordInterval,
     addTriadToSelectedNote,
     toggleTieSelectedNote,
@@ -168,6 +173,16 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
           e.preventDefault();
           moveSelectedNotePitch(-1);
         }
+      } else if (e.key === 'ArrowLeft') {
+        if (selectedNoteId) {
+          e.preventDefault();
+          moveSelectedNoteBeat(-0.5);
+        }
+      } else if (e.key === 'ArrowRight') {
+        if (selectedNoteId) {
+          e.preventDefault();
+          moveSelectedNoteBeat(0.5);
+        }
       } else if (e.key === 'Escape') {
         setSelectedNoteId(null);
       }
@@ -175,7 +190,210 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNoteId, selectedNote]);
+  }, [selectedNoteId, selectedNote, moveSelectedNoteBeat, moveSelectedNotePitch, deleteSelectedNote, setSelectedNoteId]);
+
+  // Note Dragging State
+  interface DraggingNoteState {
+    noteId: string;
+    note: ScoreNote;
+    startX: number;
+    startY: number;
+    hasMoved: boolean;
+    currentX: number;
+    currentY: number;
+    currentPitch: string;
+    currentMeasureIndex: number;
+    currentBeatPosition: number;
+    currentLineIndex: number;
+  }
+
+  const [draggingNote, setDraggingNote] = useState<DraggingNoteState | null>(null);
+  const draggingNoteRef = useRef<DraggingNoteState | null>(null);
+  draggingNoteRef.current = draggingNote;
+  const justDraggedRef = useRef<boolean>(false);
+
+  // Snapping / Grid calculator
+  const calculateGridPosition = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!svgRef.current) return null;
+      const rect = svgRef.current.getBoundingClientRect();
+      const mouseX = (clientX - rect.left) / zoom;
+      const mouseY = (clientY - rect.top) / zoom;
+
+      const lineIndex = Math.min(
+        score.lines.length - 1,
+        Math.max(0, Math.floor((mouseY - STAFF_PADDING_TOP + LINE_HEIGHT / 2) / LINE_HEIGHT))
+      );
+      const targetLine = score.lines[lineIndex];
+      if (!targetLine) return null;
+
+      const lineStaffTop = STAFF_PADDING_TOP + lineIndex * LINE_HEIGHT;
+      const beatsPerMeasure =
+        targetLine.timeSignatureNumerator * (4 / targetLine.timeSignatureDenominator);
+
+      const relativeX = mouseX - CLEF_WIDTH;
+      if (relativeX < 0) return null;
+
+      const measureOffset = Math.min(
+        targetLine.measures.length - 1,
+        Math.max(0, Math.floor(relativeX / MEASURE_WIDTH))
+      );
+      const measure = targetLine.measures[measureOffset];
+      if (!measure) return null;
+
+      const measureX = Math.max(0, Math.min(MEASURE_WIDTH - 20, relativeX % MEASURE_WIDTH));
+      const rawBeat = (measureX / (MEASURE_WIDTH - 20)) * beatsPerMeasure;
+      const snappedBeat = Math.min(
+        beatsPerMeasure - 0.25,
+        Math.max(0, Math.round(rawBeat * 2) / 2)
+      );
+
+      const stepFromTop = Math.round((mouseY - lineStaffTop) / STEP_Y);
+      const clampedStep = Math.max(-4, Math.min(13, stepFromTop));
+      const diatonicPitch = getDiatonicPitchFromStep(clampedStep, targetLine.clef);
+
+      const snappedX =
+        CLEF_WIDTH +
+        measureOffset * MEASURE_WIDTH +
+        (snappedBeat / beatsPerMeasure) * (MEASURE_WIDTH - 30) +
+        15;
+      const snappedY = lineStaffTop + clampedStep * STEP_Y;
+
+      return {
+        lineIndex,
+        targetLine,
+        lineStaffTop,
+        measureIndex: measure.index,
+        beatPosition: snappedBeat,
+        diatonicPitch,
+        snappedX,
+        snappedY,
+      };
+    },
+    [score, zoom]
+  );
+
+  // Mouse down on a note to start dragging
+  const handleNoteMouseDown = (e: React.MouseEvent, note: ScoreNote) => {
+    if (activeTool === 'pan' || activeTool === 'erase') return;
+    e.stopPropagation();
+
+    setSelectedNoteId(note.id);
+    if (!note.isRest) {
+      previewNote(note.pitch);
+    }
+
+    const noteY = calculateNoteY(
+      note.pitch,
+      STAFF_PADDING_TOP + (note.lineIndex ?? 0) * LINE_HEIGHT,
+      note.clef
+    );
+    const targetLine = score.lines[note.lineIndex ?? 0] || score.lines[0];
+    const beats = targetLine.timeSignatureNumerator * (4 / targetLine.timeSignatureDenominator);
+    const mOffset = targetLine.measures.findIndex((m) => m.index === note.measureIndex);
+    const noteX =
+      CLEF_WIDTH +
+      Math.max(0, mOffset) * MEASURE_WIDTH +
+      (note.beatPosition / beats) * (MEASURE_WIDTH - 30) +
+      15;
+
+    setDraggingNote({
+      noteId: note.id,
+      note,
+      startX: e.clientX,
+      startY: e.clientY,
+      hasMoved: false,
+      currentX: noteX,
+      currentY: noteY,
+      currentPitch: note.pitch,
+      currentMeasureIndex: note.measureIndex,
+      currentBeatPosition: note.beatPosition,
+      currentLineIndex: note.lineIndex ?? 0,
+    });
+  };
+
+  // Window listeners for smooth note drag across entire page
+  useEffect(() => {
+    if (!draggingNote) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      const currentDrag = draggingNoteRef.current;
+      if (!currentDrag) return;
+
+      const dist = Math.hypot(e.clientX - currentDrag.startX, e.clientY - currentDrag.startY);
+      const pos = calculateGridPosition(e.clientX, e.clientY);
+      if (!pos) return;
+
+      let finalPitch = pos.diatonicPitch;
+      if (currentDrag.note.accidental === 'sharp') {
+        finalPitch = `${finalPitch[0]}#${finalPitch.slice(1)}`;
+      } else if (currentDrag.note.accidental === 'flat') {
+        finalPitch = `${finalPitch[0]}b${finalPitch.slice(1)}`;
+      } else {
+        const keySig = score.keySignature || 'C';
+        const keyAlterations: Record<string, { note: string; acc: '#' | 'b' }[]> = {
+          G: [{ note: 'F', acc: '#' }],
+          D: [{ note: 'F', acc: '#' }, { note: 'C', acc: '#' }],
+          A: [{ note: 'F', acc: '#' }, { note: 'C', acc: '#' }, { note: 'G', acc: '#' }],
+          E: [{ note: 'F', acc: '#' }, { note: 'C', acc: '#' }, { note: 'G', acc: '#' }, { note: 'D', acc: '#' }],
+          F: [{ note: 'B', acc: 'b' }],
+          Bb: [{ note: 'B', acc: 'b' }, { note: 'E', acc: 'b' }],
+          Eb: [{ note: 'B', acc: 'b' }, { note: 'E', acc: 'b' }, { note: 'A', acc: 'b' }],
+          Ab: [{ note: 'B', acc: 'b' }, { note: 'E', acc: 'b' }, { note: 'A', acc: 'b' }, { note: 'D', acc: 'b' }],
+        };
+        const match = (keyAlterations[keySig] || []).find((a) => a.note === finalPitch[0]);
+        if (match) {
+          finalPitch = `${finalPitch[0]}${match.acc}${finalPitch.slice(1)}`;
+        }
+      }
+
+      if (dist > 4 && finalPitch !== currentDrag.currentPitch) {
+        previewNote(finalPitch);
+      }
+
+      const nextDrag: DraggingNoteState = {
+        ...currentDrag,
+        hasMoved: dist > 4,
+        currentX: pos.snappedX,
+        currentY: pos.snappedY,
+        currentPitch: finalPitch,
+        currentMeasureIndex: pos.measureIndex,
+        currentBeatPosition: pos.beatPosition,
+        currentLineIndex: pos.lineIndex,
+      };
+
+      draggingNoteRef.current = nextDrag;
+      setDraggingNote(nextDrag);
+    };
+
+    const handleWindowMouseUp = () => {
+      const currentDrag = draggingNoteRef.current;
+      if (currentDrag && currentDrag.hasMoved) {
+        justDraggedRef.current = true;
+        setTimeout(() => {
+          justDraggedRef.current = false;
+        }, 120);
+
+        moveNote(
+          currentDrag.noteId,
+          currentDrag.currentMeasureIndex,
+          currentDrag.currentBeatPosition,
+          currentDrag.currentPitch,
+          currentDrag.currentLineIndex
+        );
+        setSelectedNoteId(currentDrag.noteId);
+      }
+      setDraggingNote(null);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [draggingNote !== null, score, zoom, calculateGridPosition, moveNote, previewNote, setSelectedNoteId]);
 
   // Determine SVG total dimensions based on lines and measures
   const maxMeasuresInAnyLine = Math.max(
@@ -191,74 +409,32 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
 
   // Mouse move handler for ghost note placement across lines
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (activeTool !== 'input' || !svgRef.current) {
+    if (activeTool !== 'input' || !svgRef.current || draggingNoteRef.current) {
       if (ghostNote.visible) setGhostNote((prev) => ({ ...prev, visible: false }));
       return;
     }
 
-    const rect = svgRef.current.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) / zoom;
-    const mouseY = (e.clientY - rect.top) / zoom;
-
-    // Determine target line by vertical coordinate
-    const lineIndex = Math.min(
-      score.lines.length - 1,
-      Math.max(0, Math.floor((mouseY - STAFF_PADDING_TOP + LINE_HEIGHT / 2) / LINE_HEIGHT))
-    );
-    const targetLine = score.lines[lineIndex];
-    if (!targetLine) return;
-
-    const lineStaffTop = STAFF_PADDING_TOP + lineIndex * LINE_HEIGHT;
-    const beatsPerMeasure =
-      targetLine.timeSignatureNumerator * (4 / targetLine.timeSignatureDenominator);
-
-    // Check if within measures of this line
-    const relativeX = mouseX - CLEF_WIDTH;
-    if (relativeX < 0 || relativeX > targetLine.measures.length * MEASURE_WIDTH) {
+    const pos = calculateGridPosition(e.clientX, e.clientY);
+    if (!pos) {
       if (ghostNote.visible) setGhostNote((prev) => ({ ...prev, visible: false }));
       return;
     }
 
-    const measureOffset = Math.min(
-      targetLine.measures.length - 1,
-      Math.max(0, Math.floor(relativeX / MEASURE_WIDTH))
-    );
-    const measure = targetLine.measures[measureOffset];
-    if (!measure) return;
-
-    const measureX = relativeX % MEASURE_WIDTH;
-    const rawBeat = (measureX / (MEASURE_WIDTH - 20)) * beatsPerMeasure;
-    const snappedBeat = Math.min(
-      beatsPerMeasure - 0.25,
-      Math.max(0, Math.round(rawBeat * 2) / 2)
-    );
-
-    // Calculate Y step based on line staff top and line clef
-    const stepFromTop = Math.round((mouseY - lineStaffTop) / STEP_Y);
-    const clampedStep = Math.max(-4, Math.min(13, stepFromTop));
-    let pitch = getDiatonicPitchFromStep(clampedStep, targetLine.clef);
-
+    let pitch = pos.diatonicPitch;
     if (selectedAccidental === 'sharp') {
       pitch = `${pitch[0]}#${pitch.slice(1)}`;
     } else if (selectedAccidental === 'flat') {
       pitch = `${pitch[0]}b${pitch.slice(1)}`;
     }
 
-    const snappedX =
-      CLEF_WIDTH +
-      measureOffset * MEASURE_WIDTH +
-      (snappedBeat / beatsPerMeasure) * (MEASURE_WIDTH - 30) +
-      15;
-    const snappedY = lineStaffTop + clampedStep * STEP_Y;
-
     setGhostNote({
       visible: true,
-      lineIndex,
-      measureIndex: measure.index,
-      beatPosition: snappedBeat,
+      lineIndex: pos.lineIndex,
+      measureIndex: pos.measureIndex,
+      beatPosition: pos.beatPosition,
       pitch,
-      x: snappedX,
-      y: snappedY,
+      x: pos.snappedX,
+      y: pos.snappedY,
     });
   };
 
@@ -267,7 +443,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
   };
 
   const handleCanvasClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (activeTool === 'pan') {
+    if (activeTool === 'pan' || justDraggedRef.current || draggingNoteRef.current?.hasMoved) {
       return;
     }
     if (activeTool === 'input' && ghostNote.visible) {
@@ -286,7 +462,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
 
   const handleNoteClick = (e: React.MouseEvent, noteId: string) => {
     e.stopPropagation();
-    if (activeTool === 'pan') {
+    if (activeTool === 'pan' || justDraggedRef.current || draggingNoteRef.current?.hasMoved) {
       return;
     }
     if (activeTool === 'erase') {
@@ -366,6 +542,18 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                 title="Shift Pitch Down (Arrow Down)"
               >
                 <ChevronDown size={12} />
+              </SmallActionBtn>
+              <SmallActionBtn
+                onClick={() => moveSelectedNoteBeat(-0.5)}
+                title="Shift Beat Backward (Arrow Left)"
+              >
+                <ChevronLeft size={12} />
+              </SmallActionBtn>
+              <SmallActionBtn
+                onClick={() => moveSelectedNoteBeat(0.5)}
+                title="Shift Beat Forward (Arrow Right)"
+              >
+                <ChevronRight size={12} />
               </SmallActionBtn>
 
               {/* Chord Harmony Builders */}
@@ -928,6 +1116,8 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                               (MEASURE_WIDTH - 30) +
                             15;
                           const isSelected = selectedNoteId === note.id;
+                          const isBeingDragged =
+                            draggingNote?.noteId === note.id && draggingNote.hasMoved;
                           const ledgerLines = getLedgerLines(
                             note.pitch,
                             lineStaffTop,
@@ -943,7 +1133,18 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                             <g
                               key={note.id}
                               onClick={(e) => handleNoteClick(e, note.id)}
-                              style={{ cursor: 'pointer' }}
+                              onMouseDown={(e) => handleNoteMouseDown(e, note)}
+                              opacity={isBeingDragged ? 0.25 : 1}
+                              style={{
+                                cursor:
+                                  activeTool === 'erase'
+                                    ? 'pointer'
+                                    : activeTool === 'pan'
+                                    ? 'inherit'
+                                    : isSelected
+                                    ? 'grab'
+                                    : 'pointer',
+                              }}
                             >
                               {/* Note Letter Name Label (Matching reference sheet music, e.g. C, G, A) */}
                               {showNoteLabels && !note.isRest && (
@@ -1027,18 +1228,28 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                                 </text>
                               )}
 
-                              {/* Large Transparent Hit Box to guarantee easy clicking & selection */}
+                              {/* Large Transparent Hit Box to guarantee easy clicking, selection & dragging */}
                               <rect
                                 x={noteX - 18}
                                 y={noteY - 35}
                                 width="36"
                                 height="70"
                                 fill="transparent"
-                                style={{ cursor: 'pointer' }}
+                                style={{
+                                  cursor:
+                                    activeTool === 'erase'
+                                      ? 'pointer'
+                                      : activeTool === 'pan'
+                                      ? 'inherit'
+                                      : isSelected
+                                      ? 'grab'
+                                      : 'pointer',
+                                }}
+                                onMouseDown={(e) => handleNoteMouseDown(e, note)}
                               />
 
                               {/* Prominent Selection Halo & Glow Box */}
-                              {isSelected && (
+                              {isSelected && !isBeingDragged && (
                                 <g>
                                   <rect
                                     x={noteX - 16}
@@ -1175,8 +1386,82 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
               );
             })}
 
+            {/* Active Note Dragging Ghost & Live Repositioning Preview */}
+            {draggingNote && draggingNote.hasMoved && (
+              <g style={{ pointerEvents: 'none', filter: 'drop-shadow(0 0 6px rgba(0, 229, 255, 0.6))' }}>
+                {/* Ledger Lines for dragged note */}
+                {getLedgerLines(
+                  draggingNote.currentPitch,
+                  STAFF_PADDING_TOP + draggingNote.currentLineIndex * LINE_HEIGHT,
+                  score.lines[draggingNote.currentLineIndex]?.clef || 'treble'
+                ).map((ly, idx) => (
+                  <line
+                    key={`drag-ledger-${idx}`}
+                    x1={draggingNote.currentX - 12}
+                    y1={ly}
+                    x2={draggingNote.currentX + 12}
+                    y2={ly}
+                    stroke={currentTheme.colors.primary}
+                    strokeWidth="1.5"
+                  />
+                ))}
+
+                {/* Selection glow box following the dragged note */}
+                <rect
+                  x={draggingNote.currentX - 16}
+                  y={draggingNote.currentY - STEM_HEIGHT - 8}
+                  width="32"
+                  height={STEM_HEIGHT + 20}
+                  rx="6"
+                  fill="rgba(0, 229, 255, 0.25)"
+                  stroke={currentTheme.colors.primary}
+                  strokeWidth="2"
+                />
+
+                {/* Floating Pitch Badge above dragged note */}
+                <rect
+                  x={draggingNote.currentX - 14}
+                  y={draggingNote.currentY - STEM_HEIGHT - 24}
+                  width="28"
+                  height="15"
+                  rx="3"
+                  fill={currentTheme.colors.primary}
+                />
+                <text
+                  x={draggingNote.currentX}
+                  y={draggingNote.currentY - STEM_HEIGHT - 13}
+                  fontSize="9"
+                  fontWeight="bold"
+                  fill="#000000"
+                  textAnchor="middle"
+                >
+                  {draggingNote.currentPitch}
+                </text>
+
+                {/* Dragged Notehead */}
+                <ellipse
+                  cx={draggingNote.currentX}
+                  cy={draggingNote.currentY}
+                  rx={NOTEHEAD_RX}
+                  ry={NOTEHEAD_RY}
+                  fill={currentTheme.colors.primary}
+                  transform={`rotate(-20, ${draggingNote.currentX}, ${draggingNote.currentY})`}
+                />
+
+                {/* Dragged Stem */}
+                <line
+                  x1={draggingNote.currentX + NOTEHEAD_RX - 1}
+                  y1={draggingNote.currentY}
+                  x2={draggingNote.currentX + NOTEHEAD_RX - 1}
+                  y2={draggingNote.currentY - STEM_HEIGHT}
+                  stroke={currentTheme.colors.primary}
+                  strokeWidth="2"
+                />
+              </g>
+            )}
+
             {/* Ghost Note Preview on Hover */}
-            {ghostNote.visible && (
+            {ghostNote.visible && !draggingNote && (
               <g style={{ pointerEvents: 'none', opacity: 0.6 }}>
                 {getLedgerLines(
                   ghostNote.pitch,

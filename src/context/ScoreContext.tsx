@@ -72,7 +72,15 @@ export interface ScoreContextType {
   deleteSelectedNote: () => void;
   updateNote: (noteId: string, updates: Partial<ScoreNote>) => void;
   updateSelectedNote: (updates: Partial<ScoreNote>) => void;
+  moveNote: (
+    noteId: string,
+    targetMeasureIndex: number,
+    targetBeatPosition: number,
+    newPitch: string,
+    targetLineIndex?: number
+  ) => void;
   moveSelectedNotePitch: (semitoneDelta: number) => void;
+  moveSelectedNoteBeat: (beatDelta: number) => void;
   addChordInterval: (semitones: number) => void;
   addTriadToSelectedNote: (type?: 'major' | 'minor') => void;
   toggleTieSelectedNote: () => void;
@@ -380,6 +388,117 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const updateSelectedNote = (updates: Partial<ScoreNote>) => {
     if (!selectedNoteId) return;
     updateNote(selectedNoteId, updates);
+  };
+
+  const moveNote = (
+    noteId: string,
+    targetMeasureIndex: number,
+    targetBeatPosition: number,
+    newPitch: string,
+    targetLineIndex?: number
+  ) => {
+    setScore((prev) => {
+      let foundNote: ScoreNote | undefined;
+      for (const l of prev.lines) {
+        for (const m of l.measures) {
+          const match = m.notes.find((n) => n.id === noteId);
+          if (match) {
+            foundNote = match;
+            break;
+          }
+        }
+        if (foundNote) break;
+      }
+
+      if (!foundNote) return prev;
+      const noteToMove = foundNote;
+
+      // Remove from previous location
+      const updatedLines = prev.lines.map((l) => ({
+        ...l,
+        measures: l.measures.map((m) => ({
+          ...m,
+          notes: m.notes.filter((n) => n.id !== noteId),
+        })),
+      }));
+
+      // Resolved line index and clef
+      const targetLine =
+        targetLineIndex !== undefined
+          ? updatedLines[targetLineIndex]
+          : updatedLines.find((l) => l.measures.some((m) => m.index === targetMeasureIndex));
+      const resolvedLineIdx = targetLine ? targetLine.lineIndex : noteToMove.lineIndex ?? 0;
+      const resolvedClef = targetLine?.clef || noteToMove.clef || 'treble';
+
+      const updatedNote: ScoreNote = {
+        ...noteToMove,
+        pitch: newPitch,
+        measureIndex: targetMeasureIndex,
+        beatPosition: targetBeatPosition,
+        lineIndex: resolvedLineIdx,
+        clef: resolvedClef,
+      };
+
+      let inserted = false;
+      updatedLines.forEach((l) => {
+        l.measures.forEach((m) => {
+          if (m.index === targetMeasureIndex) {
+            const filtered = m.notes.filter(
+              (n) => !(n.beatPosition === targetBeatPosition && n.pitch === newPitch)
+            );
+            m.notes = [...filtered, updatedNote].sort(
+              (a, b) => a.beatPosition - b.beatPosition
+            );
+            inserted = true;
+          }
+        });
+      });
+
+      if (!inserted) return prev;
+
+      const next = normalizeScore({
+        ...prev,
+        lines: updatedLines,
+        updatedAt: new Date().toISOString(),
+      });
+      pushHistory(next);
+      return next;
+    });
+
+    previewNote(newPitch);
+  };
+
+  const moveSelectedNoteBeat = (beatDelta: number) => {
+    if (!selectedNote) return;
+    const currentMeasure = score.measures.find((m) => m.index === selectedNote.measureIndex);
+    const beatsPerMeasure = currentMeasure
+      ? currentMeasure.timeSignatureNumerator * (4 / currentMeasure.timeSignatureDenominator)
+      : 4;
+
+    let newBeat = selectedNote.beatPosition + beatDelta;
+    let newMeasureIndex = selectedNote.measureIndex;
+
+    if (newBeat < 0) {
+      if (newMeasureIndex > 0) {
+        newMeasureIndex -= 1;
+        const prevMeasure = score.measures.find((m) => m.index === newMeasureIndex);
+        const prevBeats = prevMeasure
+          ? prevMeasure.timeSignatureNumerator * (4 / prevMeasure.timeSignatureDenominator)
+          : 4;
+        newBeat = Math.max(0, prevBeats - 0.5);
+      } else {
+        newBeat = 0;
+      }
+    } else if (newBeat >= beatsPerMeasure) {
+      if (newMeasureIndex < score.measures.length - 1) {
+        newMeasureIndex += 1;
+        newBeat = 0;
+      } else {
+        newBeat = beatsPerMeasure - 0.25;
+      }
+    }
+
+    moveNote(selectedNote.id, newMeasureIndex, newBeat, selectedNote.pitch, selectedNote.lineIndex);
   };
 
   const moveSelectedNotePitch = (semitoneDelta: number) => {
@@ -1087,7 +1206,9 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         deleteSelectedNote,
         updateNote,
         updateSelectedNote,
+        moveNote,
         moveSelectedNotePitch,
+        moveSelectedNoteBeat,
         addChordInterval,
         addTriadToSelectedNote,
         toggleTieSelectedNote,
