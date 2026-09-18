@@ -8,6 +8,11 @@ Melodict is an interactive browser-based sheet music studio and virtual instrume
 
 - **Interactive Sheet Music Notation:**
   - Custom SVG notation engine rendering treble clefs, key signatures, time signatures, barlines, noteheads, stems, eighth/sixteenth flags, accidentals, and ledger lines.
+  - **Polyphonic Chords:** Support for vertical notehead stacking on the same metric beat with unified stems and full polyphonic audio playback.
+  - **Beaming Engine:** Automatic solid beams connecting consecutive eighth and sixteenth notes within the same metric beat, matching standard engraving.
+  - **Musical Ties & Slurs:** Smooth curved bezier arc ties connecting notes of identical pitch across measures.
+  - **Dynamic Expression Markings:** Notation markings ($pp$, $p$, $mp$, $mf$, $f$, $ff$) displayed underneath staff lines.
+  - **Chord Harmony Builders:** Quick-action buttons in the note inspector (`+3rd`, `+5th`, `+Triad`) to instantly construct harmonies.
   - Multi-line score systems with add/remove line capabilities and system measure markers (*5*, *9*, *13*).
   - Per-line measure additions and reductions (`+ Measure`, `- Measure`).
   - Key signature engine with standard sharp/flat glyph layouts (C, G, D, A, E, F, B♭, E♭, A♭) and automatic diatonic pitch alteration.

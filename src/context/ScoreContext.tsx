@@ -18,6 +18,7 @@ import {
   NoteDurationType,
   AccidentalType,
   ClefType,
+  DynamicMarking,
 } from '@/types/score.types';
 import { InstrumentId, PlaybackState } from '@/audio/audio.types';
 import { AudioEngine } from '@/audio/AudioEngine';
@@ -72,6 +73,10 @@ export interface ScoreContextType {
   updateNote: (noteId: string, updates: Partial<ScoreNote>) => void;
   updateSelectedNote: (updates: Partial<ScoreNote>) => void;
   moveSelectedNotePitch: (semitoneDelta: number) => void;
+  addChordInterval: (semitones: number) => void;
+  addTriadToSelectedNote: (type?: 'major' | 'minor') => void;
+  toggleTieSelectedNote: () => void;
+  setSelectedNoteDynamic: (dyn?: DynamicMarking) => void;
 
   // Multi-line and Time Signature Management
   addLine: (numerator?: number, denominator?: number, clef?: ClefType) => void;
@@ -383,6 +388,38 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const newMidi = Math.max(21, Math.min(108, currentMidi + semitoneDelta));
     const newPitch = midiToPitch(newMidi);
     updateSelectedNote({ pitch: newPitch });
+  };
+
+  const addChordInterval = (semitones: number) => {
+    if (!selectedNote) return;
+    const baseMidi = pitchToMidi(selectedNote.pitch);
+    const newMidi = Math.max(21, Math.min(108, baseMidi + semitones));
+    const newPitch = midiToPitch(newMidi);
+
+    addNote(
+      selectedNote.measureIndex,
+      selectedNote.beatPosition,
+      newPitch,
+      selectedNote.clef,
+      selectedNote.lineIndex
+    );
+  };
+
+  const addTriadToSelectedNote = (type: 'major' | 'minor' = 'major') => {
+    if (!selectedNote) return;
+    const third = type === 'major' ? 4 : 3;
+    addChordInterval(third);
+    addChordInterval(7);
+  };
+
+  const toggleTieSelectedNote = () => {
+    if (!selectedNote) return;
+    updateSelectedNote({ tied: !selectedNote.tied });
+  };
+
+  const setSelectedNoteDynamic = (dyn?: DynamicMarking) => {
+    if (!selectedNote) return;
+    updateSelectedNote({ dynamic: dyn });
   };
 
   // Wrapped toolbar setters that simultaneously update selected note if one is selected
@@ -1051,6 +1088,10 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         updateNote,
         updateSelectedNote,
         moveSelectedNotePitch,
+        addChordInterval,
+        addTriadToSelectedNote,
+        toggleTieSelectedNote,
+        setSelectedNoteDynamic,
 
         addLine,
         removeLine,

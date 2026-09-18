@@ -8,7 +8,7 @@ const lavendersBlueLine1: Measure[] = [
     timeSignatureNumerator: 3,
     timeSignatureDenominator: 4,
     notes: [
-      { id: 'lb-1', pitch: 'C4', duration: 'quarter', clef: 'treble', lineIndex: 0, measureIndex: 0, beatPosition: 0, lyric: 'La -' },
+      { id: 'lb-1', pitch: 'C4', duration: 'quarter', clef: 'treble', lineIndex: 0, measureIndex: 0, beatPosition: 0, lyric: 'La -', dynamic: 'mf' },
       { id: 'lb-2', pitch: 'G4', duration: 'quarter', clef: 'treble', lineIndex: 0, measureIndex: 0, beatPosition: 1, lyric: 'ven-' },
       { id: 'lb-3', pitch: 'G4', duration: 'quarter', clef: 'treble', lineIndex: 0, measureIndex: 0, beatPosition: 2, lyric: "der's" },
     ],

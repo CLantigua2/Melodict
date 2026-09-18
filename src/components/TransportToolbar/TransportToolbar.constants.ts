@@ -1,4 +1,4 @@
-import { NoteDurationType, AccidentalType } from '@/types/score.types';
+import { NoteDurationType, AccidentalType, DynamicMarking } from '@/types/score.types';
 
 export interface DurationOption {
   type: NoteDurationType;
@@ -26,6 +26,21 @@ export const ACCIDENTAL_OPTIONS: AccidentalOption[] = [
   { type: 'sharp', label: 'Sharp', symbol: '♯' },
   { type: 'flat', label: 'Flat', symbol: '♭' },
   { type: 'natural', label: 'Natural', symbol: '♮' },
+];
+
+export interface DynamicOption {
+  value: DynamicMarking;
+  label: string;
+  italicSymbol: string;
+}
+
+export const DYNAMIC_OPTIONS: DynamicOption[] = [
+  { value: 'pp', label: 'Pianissimo (pp)', italicSymbol: 'pp' },
+  { value: 'p', label: 'Piano (p)', italicSymbol: 'p' },
+  { value: 'mp', label: 'Mezzo-piano (mp)', italicSymbol: 'mp' },
+  { value: 'mf', label: 'Mezzo-forte (mf)', italicSymbol: 'mf' },
+  { value: 'f', label: 'Forte (f)', italicSymbol: 'f' },
+  { value: 'ff', label: 'Fortissimo (ff)', italicSymbol: 'ff' },
 ];
 
 export const TIME_SIGNATURE_OPTIONS = [

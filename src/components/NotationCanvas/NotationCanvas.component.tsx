@@ -29,6 +29,9 @@ import {
   calculateNoteY,
   getLedgerLines,
   getStemDirection,
+  groupMeasureChordsAndBeams,
+  findNextNoteWithPitch,
+  getTiePath,
 } from './NotationCanvas.helpers';
 import { NotationCanvasProps, GhostNoteState } from './NotationCanvas.types';
 import {
@@ -68,6 +71,10 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
     updateSelectedNote,
     updateScoreMeta,
     moveSelectedNotePitch,
+    addChordInterval,
+    addTriadToSelectedNote,
+    toggleTieSelectedNote,
+    setSelectedNoteDynamic,
     addLine,
     removeLine,
     changeLineTimeSignature,
@@ -360,6 +367,67 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
               >
                 <ChevronDown size={12} />
               </SmallActionBtn>
+
+              {/* Chord Harmony Builders */}
+              <SmallActionBtn
+                onClick={() => addChordInterval(4)}
+                title="Add Major 3rd above to form chord"
+              >
+                +3rd
+              </SmallActionBtn>
+              <SmallActionBtn
+                onClick={() => addChordInterval(7)}
+                title="Add Perfect 5th above"
+              >
+                +5th
+              </SmallActionBtn>
+              <SmallActionBtn
+                onClick={() => addTriadToSelectedNote('major')}
+                title="Add Major Triad (3rd & 5th)"
+              >
+                +Triad
+              </SmallActionBtn>
+
+              {/* Musical Tie Toggle */}
+              <SmallActionBtn
+                onClick={toggleTieSelectedNote}
+                style={{
+                  background: selectedNote.tied ? currentTheme.colors.surfaceActive : undefined,
+                  borderColor: selectedNote.tied ? currentTheme.colors.primary : undefined,
+                  color: selectedNote.tied ? currentTheme.colors.primary : undefined,
+                  fontWeight: selectedNote.tied ? 700 : 500,
+                }}
+                title="Toggle musical tie to next note (⌢)"
+              >
+                ⌢ Tie
+              </SmallActionBtn>
+
+              {/* Musical Dynamics Expression */}
+              <select
+                value={selectedNote.dynamic || ''}
+                onChange={(e) => setSelectedNoteDynamic((e.target.value as any) || undefined)}
+                style={{
+                  background: currentTheme.colors.surface,
+                  color: currentTheme.colors.textPrimary,
+                  border: `1px solid ${currentTheme.colors.border}`,
+                  borderRadius: '4px',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  padding: '2px 4px',
+                  cursor: 'pointer',
+                  fontStyle: 'italic',
+                }}
+                title="Assign musical dynamic expression (p, mp, mf, f, ff)"
+              >
+                <option value="">Dyn: —</option>
+                <option value="pp">pp (pianissimo)</option>
+                <option value="p">p (piano)</option>
+                <option value="mp">mp (mezzo-piano)</option>
+                <option value="mf">mf (mezzo-forte)</option>
+                <option value="f">f (forte)</option>
+                <option value="ff">ff (fortissimo)</option>
+              </select>
+
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ fontSize: '0.72rem', color: currentTheme.colors.textMuted }}>Lyric:</span>
                 <LyricInput
@@ -697,6 +765,15 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                     const measureLeft = CLEF_WIDTH + mOffset * MEASURE_WIDTH;
                     const measureRight = measureLeft + MEASURE_WIDTH;
 
+                    const { chordGroups, beamGroups } = groupMeasureChordsAndBeams(
+                      measure.notes,
+                      measureLeft,
+                      MEASURE_WIDTH,
+                      beatsPerMeasure,
+                      lineStaffTop,
+                      line.clef
+                    );
+
                     return (
                       <g
                         key={`line-${lIdx}-measure-${measure.index}`}
@@ -749,6 +826,94 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                               : '1.5'
                           }
                         />
+
+                        {/* Solid Beams connecting eighth and sixteenth notes */}
+                        {beamGroups.map((bg, bIdx) => (
+                          <g key={`beam-${measure.index}-${bIdx}`}>
+                            <line
+                              x1={bg.x1}
+                              y1={bg.y1}
+                              x2={bg.x2}
+                              y2={bg.y2}
+                              stroke={currentTheme.colors.sheetNote}
+                              strokeWidth="3.5"
+                              strokeLinecap="round"
+                            />
+                            {bg.duration === 'sixteenth' && (
+                              <line
+                                x1={bg.x1}
+                                y1={bg.stemDirection === 'up' ? bg.y1 + 5 : bg.y1 - 5}
+                                x2={bg.x2}
+                                y2={bg.stemDirection === 'up' ? bg.y2 + 5 : bg.y2 - 5}
+                                stroke={currentTheme.colors.sheetNote}
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                              />
+                            )}
+                          </g>
+                        ))}
+
+                        {/* Unified Stems and Unbeamed Flags for chords and notes */}
+                        {chordGroups.map((cg, cgIdx) => {
+                          if (cg.notes[0]?.duration === 'whole' || cg.notes.every((n) => n.isRest))
+                            return null;
+                          const hasSelected = cg.notes.some((n) => n.id === selectedNoteId);
+                          const stemColor = hasSelected
+                            ? currentTheme.colors.sheetNoteSelected
+                            : currentTheme.colors.sheetNote;
+
+                          return (
+                            <g key={`chord-stem-${measure.index}-${cgIdx}`}>
+                              <line
+                                x1={cg.stemX}
+                                y1={cg.stemStartY}
+                                x2={cg.stemX}
+                                y2={cg.stemTipY}
+                                stroke={stemColor}
+                                strokeWidth="1.8"
+                              />
+
+                              {/* Unbeamed eighth and sixteenth flags */}
+                              {!cg.isBeamed && cg.notes[0]?.duration === 'eighth' && (
+                                <path
+                                  d={
+                                    cg.stemDirection === 'up'
+                                      ? `M ${cg.stemX} ${cg.stemTipY} Q ${cg.stemX + 10} ${cg.stemTipY + 14} ${cg.stemX + 8} ${cg.stemTipY + 24}`
+                                      : `M ${cg.stemX} ${cg.stemTipY} Q ${cg.stemX + 10} ${cg.stemTipY - 14} ${cg.stemX + 8} ${cg.stemTipY - 24}`
+                                  }
+                                  fill="none"
+                                  stroke={stemColor}
+                                  strokeWidth="2.2"
+                                />
+                              )}
+
+                              {!cg.isBeamed && cg.notes[0]?.duration === 'sixteenth' && (
+                                <>
+                                  <path
+                                    d={
+                                      cg.stemDirection === 'up'
+                                        ? `M ${cg.stemX} ${cg.stemTipY} Q ${cg.stemX + 10} ${cg.stemTipY + 14} ${cg.stemX + 8} ${cg.stemTipY + 24}`
+                                        : `M ${cg.stemX} ${cg.stemTipY} Q ${cg.stemX + 10} ${cg.stemTipY - 14} ${cg.stemX + 8} ${cg.stemTipY - 24}`
+                                    }
+                                    fill="none"
+                                    stroke={stemColor}
+                                    strokeWidth="2.2"
+                                  />
+                                  <path
+                                    d={
+                                      cg.stemDirection === 'up'
+                                        ? `M ${cg.stemX} ${cg.stemTipY + 8} Q ${cg.stemX + 10} ${cg.stemTipY + 22} ${cg.stemX + 8} ${cg.stemTipY + 32}`
+                                        : `M ${cg.stemX} ${cg.stemTipY - 8} Q ${cg.stemX + 10} ${cg.stemTipY - 22} ${cg.stemX + 8} ${cg.stemTipY - 32}`
+                                    }
+                                    fill="none"
+                                    stroke={stemColor}
+                                    strokeWidth="2.2"
+                                  />
+                                </>
+                              )}
+                            </g>
+                          );
+                        })}
 
                         {/* Measure Notes */}
                         {measure.notes.map((note) => {
@@ -826,6 +991,40 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                                     }}
                                   />
                                 </foreignObject>
+                              )}
+
+                              {/* Musical Tie to next same-pitch note */}
+                              {note.tied && (() => {
+                                const nextInfo = findNextNoteWithPitch(score, note);
+                                if (!nextInfo) return null;
+                                const path = getTiePath(noteX, noteY, nextInfo.x, nextInfo.y, stemDir);
+                                return (
+                                  <path
+                                    key={`tie-${note.id}`}
+                                    d={path}
+                                    fill="none"
+                                    stroke={noteColor}
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    style={{ pointerEvents: 'none' }}
+                                  />
+                                );
+                              })()}
+
+                              {/* Dynamics Expression Marking */}
+                              {note.dynamic && (
+                                <text
+                                  x={noteX}
+                                  y={lineStaffTop + 4 * LINE_SPACING + 46}
+                                  fontSize="14"
+                                  fontStyle="italic"
+                                  fontWeight="900"
+                                  fill={currentTheme.colors.primary}
+                                  textAnchor="middle"
+                                  style={{ pointerEvents: 'none', fontFamily: 'serif' }}
+                                >
+                                  {note.dynamic}
+                                </text>
                               )}
 
                               {/* Large Transparent Hit Box to guarantee easy clicking & selection */}
@@ -955,70 +1154,6 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                                   fill={noteColor}
                                   transform={`rotate(-20, ${noteX}, ${noteY})`}
                                 />
-                              )}
-
-                              {/* Note Stem */}
-                              {note.duration !== 'whole' && (
-                                <line
-                                  x1={
-                                    stemDir === 'up'
-                                      ? noteX + NOTEHEAD_RX - 1
-                                      : noteX - NOTEHEAD_RX + 1
-                                  }
-                                  y1={noteY}
-                                  x2={
-                                    stemDir === 'up'
-                                      ? noteX + NOTEHEAD_RX - 1
-                                      : noteX - NOTEHEAD_RX + 1
-                                  }
-                                  y2={
-                                    stemDir === 'up'
-                                      ? noteY - STEM_HEIGHT
-                                      : noteY + STEM_HEIGHT
-                                  }
-                                  stroke={noteColor}
-                                  strokeWidth="1.8"
-                                />
-                              )}
-
-                              {/* Eighth Note Flag */}
-                              {note.duration === 'eighth' && (
-                                <path
-                                  d={
-                                    stemDir === 'up'
-                                      ? `M ${noteX + NOTEHEAD_RX - 1} ${noteY - STEM_HEIGHT} Q ${noteX + NOTEHEAD_RX + 10} ${noteY - STEM_HEIGHT + 14} ${noteX + NOTEHEAD_RX + 8} ${noteY - STEM_HEIGHT + 24}`
-                                      : `M ${noteX - NOTEHEAD_RX + 1} ${noteY + STEM_HEIGHT} Q ${noteX - NOTEHEAD_RX + 10} ${noteY + STEM_HEIGHT - 14} ${noteX - NOTEHEAD_RX + 8} ${noteY + STEM_HEIGHT - 24}`
-                                  }
-                                  fill="none"
-                                  stroke={noteColor}
-                                  strokeWidth="2.2"
-                                />
-                              )}
-
-                              {/* Sixteenth Note Flags */}
-                              {note.duration === 'sixteenth' && (
-                                <>
-                                  <path
-                                    d={
-                                      stemDir === 'up'
-                                        ? `M ${noteX + NOTEHEAD_RX - 1} ${noteY - STEM_HEIGHT} Q ${noteX + NOTEHEAD_RX + 10} ${noteY - STEM_HEIGHT + 14} ${noteX + NOTEHEAD_RX + 8} ${noteY - STEM_HEIGHT + 24}`
-                                        : `M ${noteX - NOTEHEAD_RX + 1} ${noteY + STEM_HEIGHT} Q ${noteX - NOTEHEAD_RX + 10} ${noteY + STEM_HEIGHT - 14} ${noteX - NOTEHEAD_RX + 8} ${noteY + STEM_HEIGHT - 24}`
-                                    }
-                                    fill="none"
-                                    stroke={noteColor}
-                                    strokeWidth="2.2"
-                                  />
-                                  <path
-                                    d={
-                                      stemDir === 'up'
-                                        ? `M ${noteX + NOTEHEAD_RX - 1} ${noteY - STEM_HEIGHT + 8} Q ${noteX + NOTEHEAD_RX + 10} ${noteY - STEM_HEIGHT + 22} ${noteX + NOTEHEAD_RX + 8} ${noteY - STEM_HEIGHT + 32}`
-                                        : `M ${noteX - NOTEHEAD_RX + 1} ${noteY + STEM_HEIGHT - 8} Q ${noteX - NOTEHEAD_RX + 10} ${noteY + STEM_HEIGHT - 22} ${noteX - NOTEHEAD_RX + 8} ${noteY + STEM_HEIGHT - 32}`
-                                    }
-                                    fill="none"
-                                    stroke={noteColor}
-                                    strokeWidth="2.2"
-                                  />
-                                </>
                               )}
 
                               {/* Dotted note dot */}

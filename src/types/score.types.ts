@@ -3,6 +3,7 @@ import { InstrumentId } from '../audio/audio.types';
 export type NoteDurationType = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth';
 export type AccidentalType = 'sharp' | 'flat' | 'natural' | 'none';
 export type ClefType = 'treble' | 'bass';
+export type DynamicMarking = 'pp' | 'p' | 'mp' | 'mf' | 'f' | 'ff';
 
 export interface ScoreNote {
   id: string;
@@ -16,6 +17,9 @@ export interface ScoreNote {
   measureIndex: number;       // Measure index
   beatPosition: number;        // in quarter beats (0, 0.5, 1.0, etc.)
   lyric?: string;             // Lyric syllable or word under the note
+  chordId?: string;           // Notes with the same measureIndex & beatPosition form a chord
+  tied?: boolean;             // True if tied to a subsequent note of the same pitch
+  dynamic?: DynamicMarking;   // Dynamic expression marking (p, f, mf, etc.)
   selected?: boolean;
 }
 

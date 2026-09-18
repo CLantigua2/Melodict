@@ -2,8 +2,11 @@ import {
   calculateNoteY,
   getLedgerLines,
   getStemDirection,
+  groupMeasureChordsAndBeams,
+  getTiePath,
 } from './NotationCanvas.helpers';
 import { STAFF_PADDING_TOP, STEP_Y } from './NotationCanvas.constants';
+import { ScoreNote } from '@/types/score.types';
 
 describe('NotationCanvas helpers', () => {
   it('calculates correct note Y coordinates on treble staff', () => {
@@ -37,5 +40,54 @@ describe('NotationCanvas helpers', () => {
     expect(getStemDirection('B4', 'treble')).toBe('down');
     expect(getStemDirection('C5', 'treble')).toBe('down');
     expect(getStemDirection('G5', 'treble')).toBe('down');
+  });
+
+  it('correctly groups polyphonic chord notes sharing the same beat', () => {
+    const chordNotes: ScoreNote[] = [
+      { id: 'c1', pitch: 'C4', duration: 'quarter', clef: 'treble', measureIndex: 0, beatPosition: 0 },
+      { id: 'c2', pitch: 'E4', duration: 'quarter', clef: 'treble', measureIndex: 0, beatPosition: 0 },
+      { id: 'c3', pitch: 'G4', duration: 'quarter', clef: 'treble', measureIndex: 0, beatPosition: 0 },
+    ];
+
+    const { chordGroups, beamGroups } = groupMeasureChordsAndBeams(
+      chordNotes,
+      80,
+      260,
+      4,
+      80,
+      'treble'
+    );
+
+    expect(chordGroups.length).toBe(1);
+    expect(chordGroups[0].notes.length).toBe(3);
+    expect(beamGroups.length).toBe(0); // Quarters are not beamed
+  });
+
+  it('beams consecutive eighth notes within the same metric beat', () => {
+    const eighthNotes: ScoreNote[] = [
+      { id: 'e1', pitch: 'F4', duration: 'eighth', clef: 'treble', measureIndex: 0, beatPosition: 1.0 },
+      { id: 'e2', pitch: 'E4', duration: 'eighth', clef: 'treble', measureIndex: 0, beatPosition: 1.5 },
+    ];
+
+    const { chordGroups, beamGroups } = groupMeasureChordsAndBeams(
+      eighthNotes,
+      80,
+      260,
+      4,
+      80,
+      'treble'
+    );
+
+    expect(chordGroups.length).toBe(2);
+    expect(chordGroups[0].isBeamed).toBe(true);
+    expect(chordGroups[1].isBeamed).toBe(true);
+    expect(beamGroups.length).toBe(1);
+    expect(beamGroups[0].duration).toBe('eighth');
+  });
+
+  it('generates curved SVG path for musical ties', () => {
+    const tiePath = getTiePath(100, 80, 150, 80, 'up');
+    expect(tiePath).toContain('M ');
+    expect(tiePath).toContain('Q ');
   });
 });
