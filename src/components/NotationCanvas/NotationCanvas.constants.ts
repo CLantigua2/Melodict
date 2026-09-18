@@ -45,6 +45,10 @@ export const TIME_SIGNATURES = [
 // Diatonic note indices for Treble staff
 // Top line F5 = 0 steps from top of staff (Y = staffTop)
 export const TREBLE_DIATONIC_STEPS: Record<number, string> = {
+  '-8': 'G6',
+  '-7': 'F6',
+  '-6': 'E6',
+  '-5': 'D6',
   '-4': 'C6',
   '-3': 'B5',
   '-2': 'A5',
@@ -63,9 +67,22 @@ export const TREBLE_DIATONIC_STEPS: Record<number, string> = {
   '11': 'B3',
   '12': 'A3',
   '13': 'G3',
+  '14': 'F3',
+  '15': 'E3',
+  '16': 'D3',
+  '17': 'C3',
+  '18': 'B2',
+  '19': 'A2',
+  '20': 'G2',
+  '21': 'F2',
+  '22': 'E2',
 };
 
 export const TREBLE_PITCH_TO_STEP: Record<string, number> = {
+  'G6': -8,
+  'F6': -7,
+  'E6': -6,
+  'D6': -5,
   'C6': -4,
   'B5': -3,
   'A5': -2,
@@ -84,11 +101,24 @@ export const TREBLE_PITCH_TO_STEP: Record<string, number> = {
   'B3': 11,
   'A3': 12,
   'G3': 13,
+  'F3': 14,
+  'E3': 15,
+  'D3': 16,
+  'C3': 17,
+  'B2': 18,
+  'A2': 19,
+  'G2': 20,
+  'F2': 21,
+  'E2': 22,
 };
 
 // Diatonic note indices for Bass staff
 // Top line A3 = step 0
 export const BASS_DIATONIC_STEPS: Record<number, string> = {
+  '-7': 'A4',
+  '-6': 'G4',
+  '-5': 'F4',
+  '-4': 'E4',
   '-3': 'D4',
   '-2': 'C4', // Middle C (ledger line)
   '-1': 'B3',
@@ -105,9 +135,18 @@ export const BASS_DIATONIC_STEPS: Record<number, string> = {
   '10': 'E2',
   '11': 'D2',
   '12': 'C2',
+  '13': 'B1',
+  '14': 'A1',
+  '15': 'G1',
+  '16': 'F1',
+  '17': 'E1',
 };
 
 export const BASS_PITCH_TO_STEP: Record<string, number> = {
+  'A4': -7,
+  'G4': -6,
+  'F4': -5,
+  'E4': -4,
   'D4': -3,
   'C4': -2,
   'B3': -1,
@@ -124,20 +163,42 @@ export const BASS_PITCH_TO_STEP: Record<string, number> = {
   'E2': 10,
   'D2': 11,
   'C2': 12,
+  'B1': 13,
+  'A1': 14,
+  'G1': 15,
+  'F1': 16,
+  'E1': 17,
+};
+
+const NOTE_LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+const LETTER_TO_VAL: Record<string, number> = {
+  C: 0,
+  D: 1,
+  E: 2,
+  F: 3,
+  G: 4,
+  A: 5,
+  B: 6,
 };
 
 export function getDiatonicPitchFromStep(step: number, clef: 'treble' | 'bass' = 'treble'): string {
   const rounded = Math.round(step);
-  if (clef === 'bass') {
-    return BASS_DIATONIC_STEPS[rounded] || 'C3';
-  }
-  return TREBLE_DIATONIC_STEPS[rounded] || 'C4';
+  // Treble top line is F5 (diatonic value 5 * 7 + 3 = 38)
+  // Bass top line is A3 (diatonic value 3 * 7 + 5 = 26)
+  const baseDiatonic = clef === 'bass' ? 26 : 38;
+  const diatonicVal = baseDiatonic - rounded;
+  const octave = Math.floor(diatonicVal / 7);
+  const letterIdx = ((diatonicVal % 7) + 7) % 7;
+  return `${NOTE_LETTERS[letterIdx]}${octave}`;
 }
 
 export function getStepFromPitch(pitch: string, clef: 'treble' | 'bass' = 'treble'): number {
   const natural = pitch.replace(/[#b]/g, '');
-  if (clef === 'bass') {
-    return BASS_PITCH_TO_STEP[natural] ?? 4;
-  }
-  return TREBLE_PITCH_TO_STEP[natural] ?? 10;
+  const letter = natural[0]?.toUpperCase() || 'C';
+  const octave = parseInt(natural.slice(1), 10);
+  const letterVal = LETTER_TO_VAL[letter] ?? 0;
+  const diatonicVal = (isNaN(octave) ? 4 : octave) * 7 + letterVal;
+
+  const baseDiatonic = clef === 'bass' ? 26 : 38;
+  return baseDiatonic - diatonicVal;
 }

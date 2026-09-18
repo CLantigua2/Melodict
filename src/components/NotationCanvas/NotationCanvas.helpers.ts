@@ -270,4 +270,34 @@ export function getTiePath(
   return `M ${startPtX} ${startPtY} Q ${ctrlX} ${ctrlY} ${endPtX} ${endPtY}`;
 }
 
+/**
+ * Generates an authentic musical curly bracket (brace) path connecting Treble and Bass staves.
+ */
+export function getPianoBracePath(
+  topY: number,
+  bottomY: number,
+  x: number = 16
+): string {
+  const midY = (topY + bottomY) / 2;
+  const h = bottomY - topY;
+  const tipX = x;
+  const cuspX = x - 13;       // Central sharp tip pointing left
+  const cuspInnerX = x - 8;
+  const bellyOuterX = x - 11; // Swelling of outer curves
+  const bellyInnerX = x - 6;  // Inside of curve
+
+  return [
+    `M ${tipX} ${topY}`,
+    `C ${tipX - 1} ${topY + 12}, ${bellyOuterX} ${topY + h * 0.16}, ${bellyOuterX} ${midY - 24}`,
+    `C ${bellyOuterX} ${midY - 8}, ${cuspX + 1} ${midY - 2}, ${cuspX} ${midY}`,
+    `C ${cuspX + 1} ${midY + 2}, ${bellyOuterX} ${midY + 8}, ${bellyOuterX} ${midY + 24}`,
+    `C ${bellyOuterX} ${bottomY - h * 0.16}, ${tipX - 1} ${bottomY - 12}, ${tipX} ${bottomY}`,
+    `C ${tipX - 2.5} ${bottomY - 15}, ${bellyInnerX} ${bottomY - h * 0.16}, ${bellyInnerX} ${midY + 22}`,
+    `C ${bellyInnerX} ${midY + 7}, ${cuspInnerX} ${midY + 1.5}, ${cuspInnerX} ${midY}`,
+    `C ${cuspInnerX} ${midY - 1.5}, ${bellyInnerX} ${midY - 7}, ${bellyInnerX} ${midY - 22}`,
+    `C ${bellyInnerX} ${topY + h * 0.16}, ${tipX - 2.5} ${topY + 15}, ${tipX} ${topY}`,
+    'Z',
+  ].join(' ');
+}
+
 

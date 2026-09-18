@@ -4,6 +4,7 @@ import {
   getStemDirection,
   groupMeasureChordsAndBeams,
   getTiePath,
+  getPianoBracePath,
 } from './NotationCanvas.helpers';
 import { STAFF_PADDING_TOP, STEP_Y } from './NotationCanvas.constants';
 import { ScoreNote } from '@/types/score.types';
@@ -104,5 +105,29 @@ describe('NotationCanvas helpers', () => {
     expect(getStemDirection('C3', 'bass')).toBe('up');
     expect(getStemDirection('D3', 'bass')).toBe('down');
     expect(getStemDirection('F3', 'bass')).toBe('down');
+  });
+
+  it('calculates note Y and ledger lines correctly for pitches below E4/E3 on treble clef', () => {
+    // E3 on treble staff is step 15 (3 ledger lines: steps 10, 12, 14, note in space below)
+    expect(calculateNoteY('E3', STAFF_PADDING_TOP, 'treble')).toBe(STAFF_PADDING_TOP + 15 * STEP_Y);
+    const e3Ledgers = getLedgerLines('E3', STAFF_PADDING_TOP, 'treble');
+    expect(e3Ledgers.length).toBe(3);
+    expect(e3Ledgers).toEqual([
+      STAFF_PADDING_TOP + 10 * STEP_Y,
+      STAFF_PADDING_TOP + 12 * STEP_Y,
+      STAFF_PADDING_TOP + 14 * STEP_Y,
+    ]);
+
+    // C3 on treble staff is step 17 (4 ledger lines: 10, 12, 14, 16)
+    expect(calculateNoteY('C3', STAFF_PADDING_TOP, 'treble')).toBe(STAFF_PADDING_TOP + 17 * STEP_Y);
+    const c3Ledgers = getLedgerLines('C3', STAFF_PADDING_TOP, 'treble');
+    expect(c3Ledgers.length).toBe(4);
+  });
+
+  it('generates an authentic curly bracket path for Grand Staff piano brace', () => {
+    const bracePath = getPianoBracePath(80, 260, 15);
+    expect(bracePath).toContain('M 15 80');
+    expect(bracePath).toContain('Z');
+    expect(bracePath).toContain('C ');
   });
 });

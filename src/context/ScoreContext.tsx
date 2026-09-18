@@ -761,27 +761,37 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
 
     setScore((prev) => {
-      const updatedLines = prev.lines.map((l) => ({
-        ...l,
-        measures: l.measures.map((m) => {
-          if (m.index !== measureIndex) return m;
+      let targetFound = false;
+      const updatedLines = prev.lines.map((l, lIdx) => {
+        const isTargetLine = targetLineIndex !== undefined ? lIdx === targetLineIndex : true;
+        const hasMeasure = l.measures.some((m) => m.index === measureIndex);
 
-          const filtered = m.notes.filter(
-            (n) => !(n.beatPosition === beatPosition && n.pitch === finalPitch)
-          );
+        if (!hasMeasure) return l;
+        if (targetLineIndex !== undefined && !isTargetLine) return l;
 
-          return {
-            ...m,
-            notes: [...filtered, { ...newNote, lineIndex: l.lineIndex }].sort(
-              (a, b) => a.beatPosition - b.beatPosition
-            ),
-          };
-        }),
-      }));
+        targetFound = true;
+        return {
+          ...l,
+          measures: l.measures.map((m) => {
+            if (m.index !== measureIndex) return m;
+
+            const filtered = m.notes.filter(
+              (n) => !(n.beatPosition === beatPosition && n.pitch === finalPitch)
+            );
+
+            return {
+              ...m,
+              notes: [...filtered, { ...newNote, lineIndex: l.lineIndex }].sort(
+                (a, b) => a.beatPosition - b.beatPosition
+              ),
+            };
+          }),
+        };
+      });
 
       const next = normalizeScore({
         ...prev,
-        lines: updatedLines,
+        lines: targetFound ? updatedLines : prev.lines,
         updatedAt: new Date().toISOString(),
       });
       pushHistory(next);

@@ -158,6 +158,33 @@ export const TransportToolbar: React.FC<TransportToolbarProps> = () => {
 
       <Divider />
 
+      {/* Staff Layout Toggle (Single Melody vs Piano Grand Staff) - placed early for prominent visibility */}
+      <SectionGroup>
+        <IconButton
+          $active={score.layoutMode === 'grand'}
+          onClick={toggleLayoutMode}
+          style={{
+            width: 'auto',
+            padding: '4px 12px',
+            fontSize: '0.82rem',
+            fontWeight: 700,
+            gap: 6,
+            background: score.layoutMode === 'grand' ? 'rgba(0, 229, 255, 0.2)' : undefined,
+            borderColor: score.layoutMode === 'grand' ? '#00e5ff' : undefined,
+            color: score.layoutMode === 'grand' ? '#00e5ff' : undefined,
+          }}
+          title={
+            score.layoutMode === 'grand'
+              ? 'Switch to Single Staff (Melody)'
+              : 'Switch to Grand Staff (Two-hand Piano)'
+          }
+        >
+          <span>{score.layoutMode === 'grand' ? '🎹 Grand Staff' : '🎼 Single Staff'}</span>
+        </IconButton>
+      </SectionGroup>
+
+      <Divider />
+
       {/* Tempo / BPM */}
       <SectionGroup>
         <TempoControl>
@@ -300,24 +327,6 @@ export const TransportToolbar: React.FC<TransportToolbarProps> = () => {
           title="Eraser Tool (Click notes to erase)"
         >
           <Eraser size={16} />
-        </IconButton>
-      </SectionGroup>
-
-      <Divider />
-
-      {/* Staff Layout Toggle (Single Melody vs Piano Grand Staff) */}
-      <SectionGroup>
-        <IconButton
-          $active={score.layoutMode === 'grand'}
-          onClick={toggleLayoutMode}
-          style={{ width: 'auto', padding: '0 10px', fontSize: '0.8rem', fontWeight: 600, gap: 5 }}
-          title={
-            score.layoutMode === 'grand'
-              ? 'Switch to Single Melody Staff (Lead Sheet)'
-              : 'Switch to Grand Staff (Piano Right & Left Hand)'
-          }
-        >
-          <span>{score.layoutMode === 'grand' ? '🎹 Grand Staff' : '🎼 Single Staff'}</span>
         </IconButton>
       </SectionGroup>
 

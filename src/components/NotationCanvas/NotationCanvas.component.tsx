@@ -38,6 +38,7 @@ import {
   groupMeasureChordsAndBeams,
   findNextNoteWithPitch,
   getTiePath,
+  getPianoBracePath,
 } from './NotationCanvas.helpers';
 import { NotationCanvasProps, GhostNoteState } from './NotationCanvas.types';
 import {
@@ -230,10 +231,27 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
       const isGrandStaff = score.layoutMode === 'grand';
       const systemHeight = isGrandStaff ? GRAND_LINE_HEIGHT : LINE_HEIGHT;
 
-      const lineIndex = Math.min(
-        score.lines.length - 1,
-        Math.max(0, Math.floor((mouseY - STAFF_PADDING_TOP + systemHeight / 2) / systemHeight))
-      );
+      // Determine target line based on vertical boundary between consecutive systems
+      let lineIndex = 0;
+      for (let i = 0; i < score.lines.length; i++) {
+        if (i === score.lines.length - 1) {
+          lineIndex = i;
+          break;
+        }
+        const currentSystemTop = STAFF_PADDING_TOP + i * systemHeight;
+        const currentSystemStaffBottom = isGrandStaff
+          ? currentSystemTop + STAFF_HEIGHT + GRAND_STAFF_GAP + STAFF_HEIGHT
+          : currentSystemTop + STAFF_HEIGHT;
+        const nextSystemTop = STAFF_PADDING_TOP + (i + 1) * systemHeight;
+        const nextButtonsTop = nextSystemTop - 62;
+        const splitY = (currentSystemStaffBottom + 30 + nextButtonsTop) / 2;
+
+        if (mouseY < splitY) {
+          lineIndex = i;
+          break;
+        }
+      }
+
       const targetLine = score.lines[lineIndex];
       if (!targetLine) return null;
 
@@ -244,16 +262,26 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
       // Determine clef and staffTop based on mode and vertical position
       let clef: ClefType = targetLine.clef || 'treble';
       let staffTop = systemTop;
+      let minStep = -2; // Up to A5 on treble staff (stops cleanly below line header buttons)
+      let maxStep = 10; // Down to C4 on treble staff (Middle C)
 
       if (isGrandStaff) {
         const boundaryY = systemTop + STAFF_HEIGHT + GRAND_STAFF_GAP / 2;
         if (mouseY >= boundaryY) {
           clef = 'bass';
           staffTop = bassStaffTop;
+          minStep = -2; // Up to C4 on bass staff (Middle C)
+          maxStep = 12; // Down to C2 on bass staff (clean, standard piano reading range)
         } else {
           clef = 'treble';
           staffTop = trebleStaffTop;
+          minStep = -2; // Up to A5 on treble staff (stops cleanly below line header buttons)
+          maxStep = 10; // Down to C4 on treble staff (Middle C)
         }
+      } else {
+        // Single staff: standard musical range down to C3 and up to A5
+        minStep = -2;
+        maxStep = 17;
       }
 
       const beatsPerMeasure =
@@ -277,7 +305,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
       );
 
       const stepFromTop = Math.round((mouseY - staffTop) / STEP_Y);
-      const clampedStep = Math.max(-4, Math.min(13, stepFromTop));
+      const clampedStep = Math.max(minStep, Math.min(maxStep, stepFromTop));
       const diatonicPitch = getDiatonicPitchFromStep(clampedStep, clef);
 
       const snappedX =
@@ -304,7 +332,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
 
   // Mouse down on a note to start dragging
   const handleNoteMouseDown = (e: React.MouseEvent, note: ScoreNote) => {
-    if (activeTool === 'pan' || activeTool === 'erase') return;
+    if (activeTool === 'pan' || activeTool === 'erase' || activeTool === 'input') return;
     e.stopPropagation();
 
     setSelectedNoteId(note.id);
@@ -514,7 +542,9 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
     }
 
     previewNote(pitch);
-    addNote(pos.measureIndex, pos.beatPosition, pitch, pos.clef, pos.lineIndex);
+    const targetLine = score.lines[pos.lineIndex];
+    const finalClef = pos.clef || targetLine?.clef || 'treble';
+    addNote(pos.measureIndex, pos.beatPosition, pitch, finalClef, pos.lineIndex);
   };
 
   // Section Selection Dragging State (when activeTool === 'select')
@@ -616,10 +646,14 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
   };
 
   const handleNoteClick = (e: React.MouseEvent, noteId: string) => {
-    e.stopPropagation();
     if (activeTool === 'pan' || justDraggedRef.current || draggingNoteRef.current?.hasMoved) {
       return;
     }
+    if (activeTool === 'input') {
+      // Allow click to bubble to canvas so harmonic notes/chords can be placed at any step above/below
+      return;
+    }
+    e.stopPropagation();
     if (activeTool === 'erase') {
       deleteNote(noteId);
     } else {
@@ -696,7 +730,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
       <g id={`${staffPrefix}-measure-notes-${measureIndex}`}>
         {/* Solid Beams connecting eighth and sixteenth notes */}
         {beamGroups.map((bg, bIdx) => (
-          <g key={`beam-${staffPrefix}-${measureIndex}-${bIdx}`}>
+          <g key={`beam-${staffPrefix}-${measureIndex}-${bIdx}`} style={{ pointerEvents: 'none' }}>
             <line
               x1={bg.x1}
               y1={bg.y1}
@@ -730,7 +764,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
             : currentTheme.colors.sheetNote;
 
           return (
-            <g key={`chord-stem-${staffPrefix}-${measureIndex}-${cgIdx}`}>
+            <g key={`chord-stem-${staffPrefix}-${measureIndex}-${cgIdx}`} style={{ pointerEvents: 'none' }}>
               <line
                 x1={cg.stemX}
                 y1={cg.stemStartY}
@@ -813,6 +847,8 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                     ? 'inherit'
                     : isSelected
                     ? 'grab'
+                    : activeTool === 'input'
+                    ? 'crosshair'
                     : 'pointer',
               }}
             >
@@ -898,29 +934,29 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                 </text>
               )}
 
-              {/* Large Transparent Hit Box to guarantee easy clicking, selection & dragging */}
-              <rect
-                x={noteX - 18}
-                y={noteY - 35}
-                width="36"
-                height="70"
-                fill="transparent"
-                style={{
-                  cursor:
-                    activeTool === 'erase'
-                      ? 'pointer'
-                      : activeTool === 'pan'
-                      ? 'inherit'
-                      : isSelected
-                      ? 'grab'
-                      : 'pointer',
-                }}
-                onMouseDown={(e) => handleNoteMouseDown(e, note)}
-              />
+              {/* Hit Box for clicking, selection & dragging (only in select / erase modes) */}
+              {activeTool !== 'input' && (
+                <rect
+                  x={noteX - 16}
+                  y={noteY - 14}
+                  width="32"
+                  height="28"
+                  fill="transparent"
+                  style={{
+                    cursor:
+                      activeTool === 'erase'
+                        ? 'pointer'
+                        : isSelected
+                        ? 'grab'
+                        : 'pointer',
+                  }}
+                  onMouseDown={(e) => handleNoteMouseDown(e, note)}
+                />
+              )}
 
               {/* Prominent Selection Halo & Glow Box */}
               {isSelected && !isBeingDragged && (
-                <g>
+                <g style={{ pointerEvents: 'none' }}>
                   <rect
                     x={noteX - 16}
                     y={
@@ -976,6 +1012,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                   y2={ledgerY}
                   stroke={currentTheme.colors.sheetLedgerLines}
                   strokeWidth="1.5"
+                  style={{ pointerEvents: 'none' }}
                 />
               ))}
 
@@ -987,6 +1024,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                   fontSize="16"
                   fontWeight="bold"
                   fill={noteColor}
+                  style={{ pointerEvents: 'none' }}
                 >
                   ♯
                 </text>
@@ -998,6 +1036,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                   fontSize="16"
                   fontWeight="bold"
                   fill={noteColor}
+                  style={{ pointerEvents: 'none' }}
                 >
                   ♭
                 </text>
@@ -1014,6 +1053,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                   stroke={noteColor}
                   strokeWidth="2.5"
                   transform={`rotate(-20, ${noteX}, ${noteY})`}
+                  style={{ pointerEvents: activeTool === 'input' ? 'none' : 'auto' }}
                 />
               ) : note.duration === 'half' ? (
                 <ellipse
@@ -1025,6 +1065,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                   stroke={noteColor}
                   strokeWidth="2.2"
                   transform={`rotate(-20, ${noteX}, ${noteY})`}
+                  style={{ pointerEvents: activeTool === 'input' ? 'none' : 'auto' }}
                 />
               ) : (
                 <ellipse
@@ -1034,6 +1075,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                   ry={NOTEHEAD_RY}
                   fill={noteColor}
                   transform={`rotate(-20, ${noteX}, ${noteY})`}
+                  style={{ pointerEvents: activeTool === 'input' ? 'none' : 'auto' }}
                 />
               )}
 
@@ -1044,6 +1086,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                   cy={noteY}
                   r="2.5"
                   fill={noteColor}
+                  style={{ pointerEvents: 'none' }}
                 />
               )}
             </g>
@@ -1270,7 +1313,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                 return (
                   <g key={line.id} id={`line-${lIdx}`}>
                     {/* Line Header & Controls in SVG (lifted well above notes and note letter labels) */}
-                    <g transform={`translate(16, ${systemTop - 52})`}>
+                    <g transform={`translate(16, ${systemTop - 62})`}>
                       <rect
                         x="0"
                         y="0"
@@ -1393,7 +1436,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                     {lIdx > 0 && line.measures.length > 0 && (
                       <text
                         x={18}
-                        y={systemTop - 12}
+                        y={systemTop - 14}
                         fontSize="14"
                         fontWeight="700"
                         fontStyle="italic"
@@ -1406,28 +1449,25 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                     {/* Clef, Key Signature & Time Signature Section on Staff */}
                     {isGrandStaff ? (
                       <g id={`grand-clef-section-${lIdx}`}>
-                        {/* Piano Brace & heavy vertical line connecting Treble & Bass */}
+                        {/* Piano Brace & vertical line connecting Treble & Bass */}
                         <g id={`piano-brace-${lIdx}`}>
+                          <path
+                            d={getPianoBracePath(trebleStaffTop, bassStaffBottom, 16)}
+                            fill={currentTheme.colors.sheetClef}
+                          />
                           <line
-                            x1={12}
+                            x1={16}
                             y1={trebleStaffTop}
-                            x2={12}
+                            x2={16}
                             y2={bassStaffBottom}
                             stroke={currentTheme.colors.sheetStaffLines}
-                            strokeWidth="2.5"
-                          />
-                          <path
-                            d={`M 10,${trebleStaffTop} C 6,${trebleStaffTop} 1,${trebleStaffTop + 25} 1,${trebleStaffTop + 45} C 1,${(trebleStaffTop + bassStaffBottom) / 2 - 25} -3,${(trebleStaffTop + bassStaffBottom) / 2 - 5} -5,${(trebleStaffTop + bassStaffBottom) / 2} C -3,${(trebleStaffTop + bassStaffBottom) / 2 + 5} 1,${(trebleStaffTop + bassStaffBottom) / 2 + 25} 1,${bassStaffBottom - 45} C 1,${bassStaffBottom - 25} 6,${bassStaffBottom} 10,${bassStaffBottom}`}
-                            fill="none"
-                            stroke={currentTheme.colors.sheetStaffLines}
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
+                            strokeWidth="1.5"
                           />
                         </g>
 
                         {/* Upper Treble Clef */}
                         <text
-                          x={18}
+                          x={22}
                           y={trebleStaffTop + LINE_SPACING * 3.7}
                           fontSize="52"
                           fill={currentTheme.colors.sheetClef}
@@ -1441,7 +1481,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
 
                         {/* Lower Bass Clef */}
                         <text
-                          x={18}
+                          x={22}
                           y={bassStaffTop + LINE_SPACING * 3.2}
                           fontSize="46"
                           fill={currentTheme.colors.sheetClef}
