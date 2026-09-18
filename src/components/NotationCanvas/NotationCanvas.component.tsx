@@ -89,6 +89,9 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
     playheadLine,
     playheadMeasure,
     playheadBeat,
+    selectedSection,
+    setSelectedSection,
+    setPlayheadPosition,
     playbackState,
     previewNote,
   } = useScore();
@@ -442,21 +445,101 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
     setGhostNote((prev) => ({ ...prev, visible: false }));
   };
 
-  const handleCanvasClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (activeTool === 'pan' || justDraggedRef.current || draggingNoteRef.current?.hasMoved) {
+  // Section Selection Dragging State (when activeTool === 'select')
+  interface SelectingSectionState {
+    startLine: number;
+    startMeasure: number;
+    startBeat: number;
+    startX: number;
+    currentLine: number;
+    currentMeasure: number;
+    currentBeat: number;
+    currentX: number;
+    hasMoved: boolean;
+  }
+
+  const [selectingSection, setSelectingSection] = useState<SelectingSectionState | null>(null);
+  const selectingSectionRef = useRef<SelectingSectionState | null>(null);
+  selectingSectionRef.current = selectingSection;
+
+  const handleCanvasMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (activeTool !== 'select' || draggingNoteRef.current) return;
+    const pos = calculateGridPosition(e.clientX, e.clientY);
+    if (!pos) return;
+
+    setSelectingSection({
+      startLine: pos.lineIndex,
+      startMeasure: pos.measureIndex,
+      startBeat: pos.beatPosition,
+      startX: pos.snappedX,
+      currentLine: pos.lineIndex,
+      currentMeasure: pos.measureIndex,
+      currentBeat: pos.beatPosition,
+      currentX: pos.snappedX,
+      hasMoved: false,
+    });
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (selectingSectionRef.current) {
+      const pos = calculateGridPosition(e.clientX, e.clientY);
+      if (pos) {
+        setSelectingSection((prev) =>
+          prev
+            ? {
+                ...prev,
+                hasMoved: true,
+                currentLine: pos.lineIndex,
+                currentMeasure: pos.measureIndex,
+                currentBeat: pos.beatPosition,
+                currentX: pos.snappedX,
+              }
+            : null
+        );
+      }
       return;
     }
-    if (activeTool === 'input' && ghostNote.visible) {
-      const targetLine = score.lines[ghostNote.lineIndex];
-      addNote(
-        ghostNote.measureIndex,
-        ghostNote.beatPosition,
-        ghostNote.pitch,
-        targetLine?.clef || 'treble',
-        ghostNote.lineIndex
-      );
-    } else if (activeTool === 'select') {
-      setSelectedNoteId(null);
+    handleMouseMove(e);
+  };
+
+  const handleCanvasMouseUp = () => {
+    const sel = selectingSectionRef.current;
+    if (sel) {
+      if (sel.hasMoved) {
+        // Defined a selection section
+        const isForward =
+          sel.currentMeasure > sel.startMeasure ||
+          (sel.currentMeasure === sel.startMeasure && sel.currentBeat >= sel.startBeat);
+
+        const startM = isForward ? sel.startMeasure : sel.currentMeasure;
+        const startL = isForward ? sel.startLine : sel.currentLine;
+        const startB = isForward ? sel.startBeat : sel.currentBeat;
+        const endM = isForward ? sel.currentMeasure : sel.startMeasure;
+        const endL = isForward ? sel.currentLine : sel.startLine;
+        const endB = isForward ? sel.currentBeat : sel.startBeat;
+
+        // Ensure range spans at least 1 beat
+        if (startM !== endM || Math.abs(endB - startB) >= 0.5) {
+          setSelectedSection({
+            startLine: startL,
+            startMeasure: startM,
+            startBeat: startB,
+            endLine: endL,
+            endMeasure: endM,
+            endBeat: endB,
+          });
+          setPlayheadPosition(startL, startM, startB);
+        } else {
+          // Just clicked a position: place playhead there!
+          setSelectedSection(null);
+          setPlayheadPosition(sel.startLine, sel.startMeasure, sel.startBeat);
+        }
+      } else {
+        // Simple click without drag in select mode: pick playback start position!
+        setSelectedSection(null);
+        setPlayheadPosition(sel.startLine, sel.startMeasure, sel.startBeat);
+      }
+      setSelectingSection(null);
     }
   };
 
@@ -711,9 +794,10 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
               $isPanTool={activeTool === 'pan'}
               width={totalWidth}
               height={totalHeight}
-              onMouseMove={handleMouseMove}
+              onMouseDown={handleCanvasMouseDown}
+              onMouseMove={handleCanvasMouseMove}
+              onMouseUp={handleCanvasMouseUp}
               onMouseLeave={handleMouseLeave}
-              onClick={handleCanvasClick}
             >
               {/* Render Each Staff Line System */}
               {score.lines.map((line, lIdx) => {
@@ -1498,8 +1582,8 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
               </g>
             )}
 
-            {/* Playhead Transport Line on Current Playing Line */}
-            {playbackState !== 'idle' && (
+            {/* Playhead Transport Line on Current Playing Line (Visible when playing OR when stopped after being positioned) */}
+            {(playbackState !== 'idle' || playheadMeasure > 0 || playheadBeat > 0) && (
               <g id="playhead" style={{ pointerEvents: 'none' }}>
                 <line
                   x1={playheadX}
@@ -1513,6 +1597,92 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                 <polygon
                   points={`${playheadX - 6},${currentLineStaffTop - 18} ${playheadX + 6},${currentLineStaffTop - 18} ${playheadX},${currentLineStaffTop - 10}`}
                   fill={currentTheme.colors.sheetPlayhead}
+                />
+              </g>
+            )}
+
+            {/* Selected Section Highlight Box (when looping or set via Select Tool) */}
+            {selectedSection && (() => {
+              const startLineTop = STAFF_PADDING_TOP + selectedSection.startLine * LINE_HEIGHT;
+              const startLineObj = score.lines[selectedSection.startLine];
+              const beatsStart = startLineObj
+                ? startLineObj.timeSignatureNumerator * (4 / startLineObj.timeSignatureDenominator)
+                : 4;
+              const startMOffset = startLineObj
+                ? startLineObj.measures.findIndex((m) => m.index === selectedSection.startMeasure)
+                : 0;
+              const boxX1 =
+                CLEF_WIDTH +
+                Math.max(0, startMOffset) * MEASURE_WIDTH +
+                (selectedSection.startBeat / beatsStart) * (MEASURE_WIDTH - 30) +
+                15;
+
+              const endLineTop = STAFF_PADDING_TOP + selectedSection.endLine * LINE_HEIGHT;
+              const endLineObj = score.lines[selectedSection.endLine];
+              const beatsEnd = endLineObj
+                ? endLineObj.timeSignatureNumerator * (4 / endLineObj.timeSignatureDenominator)
+                : 4;
+              const endMOffset = endLineObj
+                ? endLineObj.measures.findIndex((m) => m.index === selectedSection.endMeasure)
+                : 0;
+              const boxX2 =
+                CLEF_WIDTH +
+                Math.max(0, endMOffset) * MEASURE_WIDTH +
+                (selectedSection.endBeat / beatsEnd) * (MEASURE_WIDTH - 30) +
+                15;
+
+              const isSameLine = selectedSection.startLine === selectedSection.endLine;
+              const minX = Math.min(boxX1, boxX2);
+              const spanWidth = Math.max(16, Math.abs(boxX2 - boxX1));
+
+              return isSameLine ? (
+                <g id="selected-section-highlight" style={{ pointerEvents: 'none' }}>
+                  <rect
+                    x={minX - 8}
+                    y={startLineTop - 15}
+                    width={spanWidth + 16}
+                    height={4 * LINE_SPACING + 30}
+                    rx="6"
+                    fill="rgba(2, 132, 199, 0.18)"
+                    stroke="#0284c7"
+                    strokeWidth="1.5"
+                    strokeDasharray="4,2"
+                  />
+                  <rect
+                    x={minX - 8}
+                    y={startLineTop - 30}
+                    width="70"
+                    height="14"
+                    rx="3"
+                    fill="#0284c7"
+                  />
+                  <text
+                    x={minX + 27}
+                    y={startLineTop - 19}
+                    fontSize="9"
+                    fontWeight="bold"
+                    fill="#ffffff"
+                    textAnchor="middle"
+                  >
+                    LOOP SECTION
+                  </text>
+                </g>
+              ) : null;
+            })()}
+
+            {/* In-progress Drag Selection Box */}
+            {selectingSection && selectingSection.hasMoved && (
+              <g style={{ pointerEvents: 'none' }}>
+                <rect
+                  x={Math.min(selectingSection.startX, selectingSection.currentX)}
+                  y={STAFF_PADDING_TOP + selectingSection.startLine * LINE_HEIGHT - 12}
+                  width={Math.max(8, Math.abs(selectingSection.currentX - selectingSection.startX))}
+                  height={4 * LINE_SPACING + 24}
+                  rx="4"
+                  fill="rgba(0, 229, 255, 0.2)"
+                  stroke={currentTheme.colors.primary}
+                  strokeWidth="1.5"
+                  strokeDasharray="3,2"
                 />
               </g>
             )}

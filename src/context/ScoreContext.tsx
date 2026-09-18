@@ -27,6 +27,15 @@ import { pitchToMidi, midiToPitch } from '@/audio/audio.constants';
 
 export type EditTool = 'input' | 'select' | 'pan' | 'erase';
 
+export interface PlaybackSection {
+  startLine: number;
+  startMeasure: number;
+  startBeat: number;
+  endLine: number;
+  endMeasure: number;
+  endBeat: number;
+}
+
 export interface ScoreContextType {
   score: Score;
   scoresList: Score[];
@@ -47,6 +56,10 @@ export interface ScoreContextType {
   playheadLine: number;
   playheadMeasure: number;
   playheadBeat: number;
+  selectedSection: PlaybackSection | null;
+  setSelectedSection: (sec: PlaybackSection | null) => void;
+  setPlayheadPosition: (line: number, measure: number, beat?: number) => void;
+  rewindToBeginning: () => void;
   activeMidiNotes: number[];
   metronomeActive: boolean;
   setMetronomeActive: (m: boolean) => void;
@@ -191,6 +204,7 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [playheadLine, setPlayheadLine] = useState<number>(0);
   const [playheadMeasure, setPlayheadMeasure] = useState<number>(0);
   const [playheadBeat, setPlayheadBeat] = useState<number>(0);
+  const [selectedSection, setSelectedSection] = useState<PlaybackSection | null>(null);
   const [activeMidiNotes, setActiveMidiNotes] = useState<number[]>([]);
   const [metronomeActive, setMetronomeActive] = useState<boolean>(false);
   const [loopActive, setLoopActive] = useState<boolean>(false);
@@ -971,9 +985,32 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
     AudioEngine.stopAll();
     setPlaybackState('idle');
+    setActiveMidiNotes([]);
+  }, []);
+
+  const rewindToBeginning = useCallback(() => {
+    if (playbackTimerRef.current) {
+      cancelAnimationFrame(playbackTimerRef.current);
+      playbackTimerRef.current = null;
+    }
+    AudioEngine.stopAll();
+    setPlaybackState('idle');
     setPlayheadLine(0);
     setPlayheadMeasure(0);
     setPlayheadBeat(0);
+    setActiveMidiNotes([]);
+  }, []);
+
+  const setPlayheadPosition = useCallback((line: number, measure: number, beat: number = 0) => {
+    if (playbackTimerRef.current) {
+      cancelAnimationFrame(playbackTimerRef.current);
+      playbackTimerRef.current = null;
+    }
+    AudioEngine.stopAll();
+    setPlaybackState('idle');
+    setPlayheadLine(line);
+    setPlayheadMeasure(measure);
+    setPlayheadBeat(beat);
     setActiveMidiNotes([]);
   }, []);
 
@@ -1057,25 +1094,48 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     const totalScoreBeats = runningGlobalBeat;
 
-    // Calculate current global beat from playhead state
-    const currentTiming =
-      measureTimings.find((t) => t.measureIndex === playheadMeasure) ||
-      measureTimings[0];
-    const startGlobalBeat = currentTiming
-      ? currentTiming.startGlobalBeat + playheadBeat
-      : 0;
+    // Check if playing a selected section range
+    let startGlobalBeat = 0;
+    let endGlobalBeat = totalScoreBeats;
+
+    if (selectedSection) {
+      const sectionStartTiming = measureTimings.find((t) => t.measureIndex === selectedSection.startMeasure);
+      const sectionEndTiming = measureTimings.find((t) => t.measureIndex === selectedSection.endMeasure);
+      const sStart = sectionStartTiming
+        ? sectionStartTiming.startGlobalBeat + selectedSection.startBeat
+        : 0;
+      const sEnd = sectionEndTiming
+        ? sectionEndTiming.startGlobalBeat + selectedSection.endBeat
+        : totalScoreBeats;
+
+      startGlobalBeat = sStart;
+      endGlobalBeat = Math.max(sStart + 0.25, sEnd);
+    } else {
+      // Calculate current global beat from playhead state
+      const currentTiming =
+        measureTimings.find((t) => t.measureIndex === playheadMeasure) ||
+        measureTimings[0];
+      startGlobalBeat = currentTiming
+        ? currentTiming.startGlobalBeat + playheadBeat
+        : 0;
+    }
 
     const audioStartTime = ctx.currentTime;
     playbackStartTimeRef.current = audioStartTime;
     playbackStartBeatRef.current = startGlobalBeat;
 
-    // Schedule notes
-    const scheduledNotes = flatNotes.filter((n) => n.globalBeat >= startGlobalBeat);
+    // Schedule notes within range
+    const scheduledNotes = flatNotes.filter(
+      (n) => n.globalBeat >= startGlobalBeat && n.globalBeat < endGlobalBeat
+    );
     scheduledNotes.forEach((n) => {
       if (n.isRest) return;
       const beatOffset = n.globalBeat - startGlobalBeat;
       const noteStartTime = audioStartTime + beatOffset * secondsPerQuarterBeat;
-      const durationSeconds = n.durationBeats * secondsPerQuarterBeat;
+      const durationSeconds = Math.min(
+        n.durationBeats * secondsPerQuarterBeat,
+        (endGlobalBeat - n.globalBeat) * secondsPerQuarterBeat
+      );
 
       AudioEngine.playNote({
         pitch: n.pitch,
@@ -1090,7 +1150,7 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       measureTimings.forEach((t) => {
         for (let b = 0; b < t.beatCount; b++) {
           const globalB = t.startGlobalBeat + b;
-          if (globalB >= startGlobalBeat) {
+          if (globalB >= startGlobalBeat && globalB < endGlobalBeat) {
             const beatOffset = globalB - startGlobalBeat;
             const beatTime = audioStartTime + beatOffset * secondsPerQuarterBeat;
             const isDownbeat = b === 0;
@@ -1111,12 +1171,18 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const currentGlobalBeat =
         playbackStartBeatRef.current + elapsedSeconds / secondsPerQuarterBeat;
 
-      if (currentGlobalBeat >= totalScoreBeats) {
-        if (loopActive) {
+      if (currentGlobalBeat >= endGlobalBeat) {
+        if (loopActive || selectedSection) {
           stopPlayback();
-          setPlayheadLine(0);
-          setPlayheadMeasure(0);
-          setPlayheadBeat(0);
+          if (selectedSection) {
+            setPlayheadLine(selectedSection.startLine);
+            setPlayheadMeasure(selectedSection.startMeasure);
+            setPlayheadBeat(selectedSection.startBeat);
+          } else {
+            setPlayheadLine(0);
+            setPlayheadMeasure(0);
+            setPlayheadBeat(0);
+          }
           setTimeout(() => togglePlayback(), 20);
           return;
         } else {
@@ -1188,6 +1254,10 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         playheadLine,
         playheadMeasure,
         playheadBeat,
+        selectedSection,
+        setSelectedSection,
+        setPlayheadPosition,
+        rewindToBeginning,
         activeMidiNotes,
         metronomeActive,
         setMetronomeActive,

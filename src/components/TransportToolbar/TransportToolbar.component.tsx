@@ -17,6 +17,8 @@ import {
   Eraser,
   Dot,
   Volume2,
+  ChevronsLeft,
+  X,
 } from 'lucide-react';
 import { useScore } from '@/context/ScoreContext';
 import {
@@ -57,6 +59,9 @@ export const TransportToolbar: React.FC<TransportToolbarProps> = () => {
     playbackState,
     togglePlayback,
     stopPlayback,
+    rewindToBeginning,
+    selectedSection,
+    setSelectedSection,
     loopActive,
     setLoopActive,
     metronomeActive,
@@ -81,6 +86,10 @@ export const TransportToolbar: React.FC<TransportToolbarProps> = () => {
     <ToolbarContainer>
       {/* Playback Transport Controls */}
       <SectionGroup>
+        <IconButton onClick={rewindToBeginning} title="Rewind to beginning (<<)">
+          <ChevronsLeft size={18} />
+        </IconButton>
+
         <TransportPlayButton
           $isPlaying={playbackState === 'playing'}
           onClick={togglePlayback}
@@ -89,7 +98,7 @@ export const TransportToolbar: React.FC<TransportToolbarProps> = () => {
           {playbackState === 'playing' ? <Pause size={20} /> : <Play size={20} style={{ marginLeft: 2 }} />}
         </TransportPlayButton>
 
-        <IconButton onClick={stopPlayback} title="Stop and rewind">
+        <IconButton onClick={stopPlayback} title="Stop">
           <Square size={16} />
         </IconButton>
 
@@ -108,6 +117,42 @@ export const TransportToolbar: React.FC<TransportToolbarProps> = () => {
         >
           <Bell size={16} />
         </IconButton>
+
+        {selectedSection && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '2px 8px',
+              borderRadius: '4px',
+              background: '#0284c7',
+              color: '#ffffff',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+            }}
+          >
+            <span>
+              Looping M{selectedSection.startMeasure + 1} - M{selectedSection.endMeasure + 1}
+            </span>
+            <button
+              onClick={() => setSelectedSection(null)}
+              title="Clear Section Loop"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'transparent',
+                color: '#ffffff',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+              }}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
       </SectionGroup>
 
       <Divider />
