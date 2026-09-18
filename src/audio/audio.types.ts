@@ -4,6 +4,7 @@ export type InstrumentId =
   | 'string_ensemble_1'
   | 'violin'
   | 'flute'
+  | 'clarinet'
   | 'acoustic_guitar_nylon'
   | 'marimba'
   | 'synth_lead';

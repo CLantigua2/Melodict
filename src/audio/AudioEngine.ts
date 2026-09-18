@@ -88,6 +88,7 @@ class AudioEngineClass {
         string_ensemble_1: 'string_ensemble_1',
         violin: 'violin',
         flute: 'flute',
+        clarinet: 'clarinet',
         acoustic_guitar_nylon: 'acoustic_guitar_nylon',
         marimba: 'marimba',
         synth_lead: 'lead_1_square',
@@ -168,6 +169,11 @@ class AudioEngineClass {
     } else if (this.currentInstrumentId === 'flute') {
       osc1.type = 'sine';
       osc2.type = 'triangle';
+    } else if (this.currentInstrumentId === 'clarinet') {
+      // Clarinet cylindrical bore: odd harmonics characteristic (square/triangle mix)
+      osc1.type = 'triangle';
+      osc2.type = 'square';
+      osc2.detune.setValueAtTime(3, startTime);
     } else if (this.currentInstrumentId === 'marimba') {
       osc1.type = 'sine';
       osc2.type = 'sine';

@@ -32,6 +32,12 @@ export const INSTRUMENT_OPTIONS: InstrumentOption[] = [
     description: 'Airy melodic acoustic concert flute',
   },
   {
+    id: 'clarinet',
+    name: 'Bb Clarinet',
+    category: 'Winds',
+    description: 'Warm, woody acoustic soprano clarinet',
+  },
+  {
     id: 'acoustic_guitar_nylon',
     name: 'Classical Guitar',
     category: 'Plucked',
