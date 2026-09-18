@@ -13,6 +13,7 @@ class AudioEngineClass {
   private currentInstrumentId: InstrumentId = 'acoustic_grand_piano';
   private smplrInstance: any = null;
   private activeVoices: Map<number, StopFn[]> = new Map();
+  private activeMetronomeNodes: { osc: OscillatorNode; gain: GainNode }[] = [];
   private scheduledTimeouts: number[] = [];
   private isLoadingSamples: boolean = false;
   private volume: number = 0.8;
@@ -222,27 +223,51 @@ class AudioEngineClass {
     return stopHandler;
   }
 
-  public playMetronomeTick(isDownbeat: boolean) {
+  public playMetronomeTick(isDownbeat: boolean, time?: number) {
     const ctx = this.init();
     if (!this.masterGain) return;
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    const now = ctx.currentTime;
+    const startTime = time ?? ctx.currentTime;
 
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(isDownbeat ? 1600 : 900, now);
+    osc.type = isDownbeat ? 'sine' : 'triangle';
+    osc.frequency.setValueAtTime(isDownbeat ? 1760 : 880, startTime);
 
-    const peak = isDownbeat ? 0.35 : 0.2;
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(peak, now + 0.002);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+    const peak = isDownbeat ? 0.45 : 0.28;
+    gain.gain.setValueAtTime(0.0001, startTime);
+    gain.gain.exponentialRampToValueAtTime(peak, startTime + 0.001);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.035);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
 
-    osc.start(now);
-    osc.stop(now + 0.05);
+    osc.start(startTime);
+    osc.stop(startTime + 0.04);
+
+    const nodeEntry = { osc, gain };
+    this.activeMetronomeNodes.push(nodeEntry);
+    const cleanupDelay = Math.max(60, (startTime - ctx.currentTime + 0.1) * 1000);
+    setTimeout(() => {
+      const idx = this.activeMetronomeNodes.indexOf(nodeEntry);
+      if (idx !== -1) this.activeMetronomeNodes.splice(idx, 1);
+    }, cleanupDelay);
+  }
+
+  public stopMetronome() {
+    if (this.ctx) {
+      const now = this.ctx.currentTime;
+      this.activeMetronomeNodes.forEach(({ osc, gain }) => {
+        try {
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(0.0001, now);
+          osc.stop(now + 0.01);
+          osc.disconnect();
+          gain.disconnect();
+        } catch (_) {}
+      });
+    }
+    this.activeMetronomeNodes = [];
   }
 
   private trackVoice(midi: number, stopFn: StopFn) {
@@ -261,6 +286,7 @@ class AudioEngineClass {
   }
 
   public stopAll() {
+    this.stopMetronome();
     this.activeVoices.forEach((list) => {
       list.forEach((fn) => fn());
     });

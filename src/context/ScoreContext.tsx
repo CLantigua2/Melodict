@@ -206,7 +206,16 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [playheadBeat, setPlayheadBeat] = useState<number>(0);
   const [selectedSection, setSelectedSection] = useState<PlaybackSection | null>(null);
   const [activeMidiNotes, setActiveMidiNotes] = useState<number[]>([]);
-  const [metronomeActive, setMetronomeActive] = useState<boolean>(false);
+  const [metronomeActive, setMetronomeActiveState] = useState<boolean>(false);
+  const metronomeActiveRef = useRef<boolean>(false);
+  const standaloneMetronomeTimerRef = useRef<number | null>(null);
+  const playbackTimingsRef = useRef<{
+    audioStartTime: number;
+    startGlobalBeat: number;
+    endGlobalBeat: number;
+    secondsPerQuarterBeat: number;
+    measureTimings: { measureIndex: number; startGlobalBeat: number; beatCount: number }[];
+  } | null>(null);
   const [loopActive, setLoopActive] = useState<boolean>(false);
   const [masterVolume, setMasterVolumeState] = useState<number>(0.8);
   const [isInstrumentLoading, setIsInstrumentLoading] = useState<boolean>(false);
@@ -214,6 +223,83 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const playbackTimerRef = useRef<number | null>(null);
   const playbackStartTimeRef = useRef<number>(0);
   const playbackStartBeatRef = useRef<number>(0);
+
+  const schedulePlaybackMetronome = useCallback((fromCurrentTime: boolean = false) => {
+    const timings = playbackTimingsRef.current;
+    const ctx = AudioEngine.getContext();
+    if (!timings || !ctx) return;
+
+    const { audioStartTime, startGlobalBeat, endGlobalBeat, secondsPerQuarterBeat, measureTimings } = timings;
+    const now = ctx.currentTime;
+
+    measureTimings.forEach((t) => {
+      for (let b = 0; b < t.beatCount; b++) {
+        const globalB = t.startGlobalBeat + b;
+        if (globalB >= startGlobalBeat && globalB < endGlobalBeat) {
+          const beatOffset = globalB - startGlobalBeat;
+          const beatTime = audioStartTime + beatOffset * secondsPerQuarterBeat;
+          if (!fromCurrentTime || beatTime >= now) {
+            const isDownbeat = b === 0;
+            AudioEngine.playMetronomeTick(isDownbeat, beatTime);
+          }
+        }
+      }
+    });
+  }, []);
+
+  const setMetronomeActive = useCallback(async (active: boolean) => {
+    setMetronomeActiveState(active);
+    metronomeActiveRef.current = active;
+
+    if (!active) {
+      AudioEngine.stopMetronome();
+      if (standaloneMetronomeTimerRef.current) {
+        clearInterval(standaloneMetronomeTimerRef.current);
+        standaloneMetronomeTimerRef.current = null;
+      }
+    } else {
+      await AudioEngine.unlockAudio();
+      if (playbackState === 'playing') {
+        schedulePlaybackMetronome(true);
+      }
+    }
+  }, [playbackState, schedulePlaybackMetronome]);
+
+  // Standalone metronome ticker when transport is idle or paused
+  useEffect(() => {
+    if (!metronomeActive || playbackState === 'playing') {
+      if (standaloneMetronomeTimerRef.current) {
+        clearInterval(standaloneMetronomeTimerRef.current);
+        standaloneMetronomeTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Play immediate downbeat tick when toggled ON
+    AudioEngine.unlockAudio().then(() => {
+      AudioEngine.playMetronomeTick(true);
+    });
+
+    const bpm = score.tempo || 120;
+    const intervalMs = (60 / bpm) * 1000;
+    const beatsPerBar = score.timeSignatureNumerator || 4;
+    let nextBeat = 1;
+
+    const intervalId = window.setInterval(() => {
+      const isDownbeat = nextBeat % beatsPerBar === 0;
+      AudioEngine.playMetronomeTick(isDownbeat);
+      nextBeat = (nextBeat + 1) % beatsPerBar;
+    }, intervalMs);
+
+    standaloneMetronomeTimerRef.current = intervalId;
+
+    return () => {
+      clearInterval(intervalId);
+      if (standaloneMetronomeTimerRef.current === intervalId) {
+        standaloneMetronomeTimerRef.current = null;
+      }
+    };
+  }, [metronomeActive, playbackState, score.tempo, score.timeSignatureNumerator]);
 
   // Find currently selected note object
   const selectedNote = useMemo(() => {
@@ -983,6 +1069,8 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       cancelAnimationFrame(playbackTimerRef.current);
       playbackTimerRef.current = null;
     }
+    playbackTimingsRef.current = null;
+    AudioEngine.stopMetronome();
     AudioEngine.stopAll();
     setPlaybackState('idle');
     setActiveMidiNotes([]);
@@ -993,6 +1081,8 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       cancelAnimationFrame(playbackTimerRef.current);
       playbackTimerRef.current = null;
     }
+    playbackTimingsRef.current = null;
+    AudioEngine.stopMetronome();
     AudioEngine.stopAll();
     setPlaybackState('idle');
     setPlayheadLine(0);
@@ -1006,6 +1096,8 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       cancelAnimationFrame(playbackTimerRef.current);
       playbackTimerRef.current = null;
     }
+    playbackTimingsRef.current = null;
+    AudioEngine.stopMetronome();
     AudioEngine.stopAll();
     setPlaybackState('idle');
     setPlayheadLine(line);
@@ -1020,6 +1112,8 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         cancelAnimationFrame(playbackTimerRef.current);
         playbackTimerRef.current = null;
       }
+      playbackTimingsRef.current = null;
+      AudioEngine.stopMetronome();
       AudioEngine.stopAll();
       setPlaybackState('paused');
       setActiveMidiNotes([]);
@@ -1145,24 +1239,18 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
     });
 
-    // Schedule metronome
-    if (metronomeActive) {
-      measureTimings.forEach((t) => {
-        for (let b = 0; b < t.beatCount; b++) {
-          const globalB = t.startGlobalBeat + b;
-          if (globalB >= startGlobalBeat && globalB < endGlobalBeat) {
-            const beatOffset = globalB - startGlobalBeat;
-            const beatTime = audioStartTime + beatOffset * secondsPerQuarterBeat;
-            const isDownbeat = b === 0;
+    // Save active playback timings for dynamic metronome toggling during playback
+    playbackTimingsRef.current = {
+      audioStartTime,
+      startGlobalBeat,
+      endGlobalBeat,
+      secondsPerQuarterBeat,
+      measureTimings,
+    };
 
-            setTimeout(() => {
-              if (playbackState !== 'idle') {
-                AudioEngine.playMetronomeTick(isDownbeat);
-              }
-            }, Math.max(0, (beatTime - ctx.currentTime) * 1000));
-          }
-        }
-      });
+    // Schedule metronome directly in sync with audio context if active
+    if (metronomeActiveRef.current) {
+      schedulePlaybackMetronome(false);
     }
 
     const updateTransport = () => {
