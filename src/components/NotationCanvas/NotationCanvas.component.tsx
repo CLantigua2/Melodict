@@ -1472,17 +1472,25 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
 
                     {/* Clef, Key Signature & Time Signature Section on Staff */}
                     {isGrandStaff ? (
-                      <g id={`grand-clef-section-${lIdx}`}>
-                        <g id={`piano-brace-${lIdx}`}>
-                          <path
-                            d={getPianoBracePath(trebleStaffTop, bassStaffBottom, 24)}
-                            fill={currentTheme.colors.sheetClef}
-                          />
-                      </g>
+                      // y=220, x=-25
+                      <g id={`grand-clef-section-${lIdx}`}> 
+                         <text
+                          x={-30}
+                          y={trebleStaffTop + LINE_SPACING * 10}
+                          fontSize="200"
+                          fill={currentTheme.colors.sheetClef}
+                          // fontWeight="100"
+                          style={{
+                            fontFamily: currentTheme.fonts.music,
+                            pointerEvents: 'none',
+                          }}
+                        >
+                          {'{'}
+                        </text>
 
                         {/* Upper Treble Clef */}
                         <text
-                          x={40}
+                          x={50}
                           y={trebleStaffTop + LINE_SPACING * 3.7}
                           fontSize="52"
                           fill={currentTheme.colors.sheetClef}
@@ -1496,7 +1504,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
 
                         {/* Lower Bass Clef */}
                         <text
-                          x={40}
+                          x={50}
                           y={bassStaffTop + LINE_SPACING * 3.2}
                           fontSize="46"
                           fill={currentTheme.colors.sheetClef}
@@ -1636,7 +1644,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                       <g id={`clef-section-${lIdx}`}>
                         {/* Single Clef Symbol */}
                         <text
-                          x={40}
+                          x={50}
                           y={lineStaffTop + (line.clef === 'bass' ? LINE_SPACING * 3.2 : LINE_SPACING * 3.7)}
                           fontSize={line.clef === 'bass' ? '46' : '52'}
                           fill={currentTheme.colors.sheetClef}
