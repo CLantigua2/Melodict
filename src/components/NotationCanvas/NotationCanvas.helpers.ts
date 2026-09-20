@@ -276,28 +276,23 @@ export function getTiePath(
 export function getPianoBracePath(
   topY: number,
   bottomY: number,
-  x: number = 16
+  x: number = 24
 ): string {
-  const midY = (topY + bottomY) / 2;
   const h = bottomY - topY;
-  const tipX = x;
-  const cuspX = x - 13;       // Central sharp tip pointing left
-  const cuspInnerX = x - 8;
-  const bellyOuterX = x - 11; // Swelling of outer curves
-  const bellyInnerX = x - 6;  // Inside of curve
 
   return [
-    `M ${tipX} ${topY}`,
-    `C ${tipX - 1} ${topY + 12}, ${bellyOuterX} ${topY + h * 0.16}, ${bellyOuterX} ${midY - 24}`,
-    `C ${bellyOuterX} ${midY - 8}, ${cuspX + 1} ${midY - 2}, ${cuspX} ${midY}`,
-    `C ${cuspX + 1} ${midY + 2}, ${bellyOuterX} ${midY + 8}, ${bellyOuterX} ${midY + 24}`,
-    `C ${bellyOuterX} ${bottomY - h * 0.16}, ${tipX - 1} ${bottomY - 12}, ${tipX} ${bottomY}`,
-    `C ${tipX - 2.5} ${bottomY - 15}, ${bellyInnerX} ${bottomY - h * 0.16}, ${bellyInnerX} ${midY + 22}`,
-    `C ${bellyInnerX} ${midY + 7}, ${cuspInnerX} ${midY + 1.5}, ${cuspInnerX} ${midY}`,
-    `C ${cuspInnerX} ${midY - 1.5}, ${bellyInnerX} ${midY - 7}, ${bellyInnerX} ${midY - 22}`,
-    `C ${bellyInnerX} ${topY + h * 0.16}, ${tipX - 2.5} ${topY + 15}, ${tipX} ${topY}`,
-    'Z',
+    `M ${x} ${topY}`,
+    `C ${x - 2} ${topY + h * 0.0167}, ${x - 14} ${topY + h * 0.1}, ${x - 12} ${topY + h * 0.25}`,
+    `C ${x - 10} ${topY + h * 0.35}, ${x - 4} ${topY + h * 0.4167}, ${x - 18} ${topY + h * 0.4933}`,
+    `L ${x - 20} ${topY + h * 0.5}`,
+    `L ${x - 18} ${topY + h * 0.5067}`,
+    `C ${x - 4} ${topY + h * 0.5833}, ${x - 10} ${topY + h * 0.65}, ${x - 12} ${topY + h * 0.75}`,
+    `C ${x - 14} ${topY + h * 0.9}, ${x - 2} ${topY + h * 0.9833}, ${x} ${bottomY}`,
+    `C ${x - 3} ${topY + h * 0.9833}, ${x - 16} ${topY + h * 0.9}, ${x - 15} ${topY + h * 0.75}`,
+    `C ${x - 14} ${topY + h * 0.65}, ${x - 9} ${topY + h * 0.56}, ${x - 13} ${topY + h * 0.5167}`,
+    `L ${x - 17} ${topY + h * 0.5}`,
+    `L ${x - 13} ${topY + h * 0.4833}`,
+    `C ${x - 9} ${topY + h * 0.44}, ${x - 14} ${topY + h * 0.3833}, ${x - 15} ${topY + h * 0.25}`,
+    `C ${x - 16} ${topY + h * 0.1}, ${x - 3} ${topY + h * 0.0167}, ${x} ${topY} Z`,
   ].join(' ');
 }
-
-

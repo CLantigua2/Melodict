@@ -1473,25 +1473,16 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                     {/* Clef, Key Signature & Time Signature Section on Staff */}
                     {isGrandStaff ? (
                       <g id={`grand-clef-section-${lIdx}`}>
-                        {/* Piano Brace & vertical line connecting Treble & Bass */}
                         <g id={`piano-brace-${lIdx}`}>
                           <path
-                            d={getPianoBracePath(trebleStaffTop, bassStaffBottom, 16)}
+                            d={getPianoBracePath(trebleStaffTop, bassStaffBottom, 24)}
                             fill={currentTheme.colors.sheetClef}
                           />
-                          <line
-                            x1={16}
-                            y1={trebleStaffTop}
-                            x2={16}
-                            y2={bassStaffBottom}
-                            stroke={currentTheme.colors.sheetStaffLines}
-                            strokeWidth="1.5"
-                          />
-                        </g>
+                      </g>
 
                         {/* Upper Treble Clef */}
                         <text
-                          x={22}
+                          x={40}
                           y={trebleStaffTop + LINE_SPACING * 3.7}
                           fontSize="52"
                           fill={currentTheme.colors.sheetClef}
@@ -1505,7 +1496,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
 
                         {/* Lower Bass Clef */}
                         <text
-                          x={22}
+                          x={40}
                           y={bassStaffTop + LINE_SPACING * 3.2}
                           fontSize="46"
                           fill={currentTheme.colors.sheetClef}
@@ -1645,7 +1636,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                       <g id={`clef-section-${lIdx}`}>
                         {/* Single Clef Symbol */}
                         <text
-                          x={16}
+                          x={40}
                           y={lineStaffTop + (line.clef === 'bass' ? LINE_SPACING * 3.2 : LINE_SPACING * 3.7)}
                           fontSize={line.clef === 'bass' ? '46' : '52'}
                           fill={currentTheme.colors.sheetClef}
