@@ -857,7 +857,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
               {showNoteLabels && !note.isRest && (
                 <text
                   x={noteX}
-                  y={staffTop - 12}
+                  y={staffTop - 24}
                   fontSize="12"
                   fontWeight="700"
                   fill={
@@ -1337,7 +1337,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                 return (
                   <g key={line.id} id={`line-${lIdx}`}>
                     {/* Line Header & Controls in SVG (lifted well above notes and note letter labels) */}
-                    <g transform={`translate(16, ${systemTop - 62})`}>
+                    <g transform={`translate(16, ${systemTop - 70})`}>
                       <rect
                         x="0"
                         y="0"
@@ -1479,10 +1479,14 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
                           y={trebleStaffTop + LINE_SPACING * 10}
                           fontSize="200"
                           fill={currentTheme.colors.sheetClef}
-                          // fontWeight="100"
+                          stroke={`${currentTheme.colors.sheetClef}`}
+                          strokeWidth="1px"
                           style={{
                             fontFamily: currentTheme.fonts.music,
                             pointerEvents: 'none',
+                            fontWeight: "normal",
+                            stroke: `${currentTheme.colors.sheetClef}`,
+                            strokeWidth: "1px",
                           }}
                         >
                           {'{'}
@@ -1490,7 +1494,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
 
                         {/* Upper Treble Clef */}
                         <text
-                          x={50}
+                          x={53}
                           y={trebleStaffTop + LINE_SPACING * 3.7}
                           fontSize="52"
                           fill={currentTheme.colors.sheetClef}
@@ -1504,7 +1508,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
 
                         {/* Lower Bass Clef */}
                         <text
-                          x={50}
+                          x={53}
                           y={bassStaffTop + LINE_SPACING * 3.2}
                           fontSize="46"
                           fill={currentTheme.colors.sheetClef}
