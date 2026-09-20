@@ -1,73 +1,74 @@
 import { NextResponse } from 'next/server';
-import { INITIAL_MOCK_SCORES } from '@/mock/scores.data';
-import { Score, CreateScoreDTO } from '@/types/score.types';
+import { getServerUserId, generateUUID, USER_ID_COOKIE_NAME } from '@/lib/user';
+import { getUserScores, saveScore } from '@/lib/server/storage';
+import { CreateScoreDTO } from '@/types/score.types';
 
-// In-memory store initialized from mock data
-let scoresStore: Score[] = [...INITIAL_MOCK_SCORES];
+export async function GET(request: Request) {
+  try {
+    let userId = getServerUserId(request);
+    let isNewUser = false;
 
-export async function GET() {
-  return NextResponse.json({
-    success: true,
-    data: scoresStore,
-  });
+    if (!userId) {
+      userId = generateUUID();
+      isNewUser = true;
+    }
+
+    const scores = await getUserScores(userId);
+
+    const response = NextResponse.json({
+      success: true,
+      userId,
+      data: scores,
+    });
+
+    if (isNewUser) {
+      response.cookies.set(USER_ID_COOKIE_NAME, userId, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 365,
+        sameSite: 'lax',
+      });
+    }
+
+    return response;
+  } catch (err: any) {
+    return NextResponse.json(
+      { success: false, error: err.message || 'Failed to retrieve scores' },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: Request) {
   try {
+    let userId = getServerUserId(request);
+    let isNewUser = false;
+
+    if (!userId) {
+      userId = generateUUID();
+      isNewUser = true;
+    }
+
     const body: CreateScoreDTO = await request.json();
+    const newScore = await saveScore(userId, body);
 
-    const defaultMeasures = [
+    const response = NextResponse.json(
       {
-        index: 0,
-        lineIndex: 0,
-        timeSignatureNumerator: body.timeSignatureNumerator || 4,
-        timeSignatureDenominator: body.timeSignatureDenominator || 4,
-        notes: [],
+        success: true,
+        userId,
+        data: newScore,
       },
-      {
-        index: 1,
-        lineIndex: 0,
-        timeSignatureNumerator: body.timeSignatureNumerator || 4,
-        timeSignatureDenominator: body.timeSignatureDenominator || 4,
-        notes: [],
-      },
-    ];
+      { status: 201 }
+    );
 
-    const defaultLines = [
-      {
-        id: `line-${Date.now()}-1`,
-        lineIndex: 0,
-        clef: 'treble' as const,
-        timeSignatureNumerator: body.timeSignatureNumerator || 4,
-        timeSignatureDenominator: body.timeSignatureDenominator || 4,
-        measures: defaultMeasures,
-      },
-    ];
+    if (isNewUser) {
+      response.cookies.set(USER_ID_COOKIE_NAME, userId, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 365,
+        sameSite: 'lax',
+      });
+    }
 
-    const lines = body.lines || defaultLines;
-    const measures = body.measures || lines.flatMap((l) => l.measures);
-
-    const newScore: Score = {
-      id: `score-${Date.now()}`,
-      title: body.title || 'Untitled Composition',
-      composer: body.composer || 'Anonymous',
-      tempo: body.tempo || 120,
-      timeSignatureNumerator: body.timeSignatureNumerator || 4,
-      timeSignatureDenominator: body.timeSignatureDenominator || 4,
-      keySignature: body.keySignature || 'C',
-      instrumentId: body.instrumentId || 'acoustic_grand_piano',
-      lines,
-      measures,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    scoresStore.unshift(newScore);
-
-    return NextResponse.json({
-      success: true,
-      data: newScore,
-    }, { status: 201 });
+    return response;
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message || 'Invalid score payload' },

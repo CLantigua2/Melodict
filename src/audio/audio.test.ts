@@ -1,4 +1,11 @@
-import { pitchToMidi, midiToPitch, midiToFrequency } from './audio.constants';
+import {
+  pitchToMidi,
+  midiToPitch,
+  midiToFrequency,
+  INSTRUMENT_RANGES,
+  isPitchInInstrumentRange,
+  getInstrumentRange,
+} from './audio.constants';
 import { generateMidiFile } from './midiExport';
 import { INITIAL_MOCK_SCORES } from '../mock/scores.data';
 
@@ -34,5 +41,30 @@ describe('Audio helpers and MIDI export', () => {
     expect(midiBytes[1]).toBe(0x54); // 'T'
     expect(midiBytes[2]).toBe(0x68); // 'h'
     expect(midiBytes[3]).toBe(0x64); // 'd'
+  });
+
+  it('validates playable instrument ranges accurately', () => {
+    // Clarinet: D3 (MIDI 50) to C7 (MIDI 96)
+    const clarinetRange = getInstrumentRange('clarinet');
+    expect(clarinetRange.minPitch).toBe('D3');
+    expect(clarinetRange.maxPitch).toBe('C7');
+
+    expect(isPitchInInstrumentRange('D3', 'clarinet')).toBe(true);
+    expect(isPitchInInstrumentRange('C4', 'clarinet')).toBe(true);
+    expect(isPitchInInstrumentRange('A5', 'clarinet')).toBe(true);
+    expect(isPitchInInstrumentRange('A6', 'clarinet')).toBe(true);
+    expect(isPitchInInstrumentRange('C7', 'clarinet')).toBe(true);
+    // C3 is below clarinet's lowest physical acoustic tone
+    expect(isPitchInInstrumentRange('C3', 'clarinet')).toBe(false);
+    // D7 is above clarinet altissimo register
+    expect(isPitchInInstrumentRange('D7', 'clarinet')).toBe(false);
+
+    // Flute: C4 (MIDI 60) to D7 (MIDI 98)
+    expect(isPitchInInstrumentRange('C4', 'flute')).toBe(true);
+    expect(isPitchInInstrumentRange('B3', 'flute')).toBe(false); // Below flute footjoint
+
+    // Violin: G3 (MIDI 55) to E7 (MIDI 100)
+    expect(isPitchInInstrumentRange('G3', 'violin')).toBe(true);
+    expect(isPitchInInstrumentRange('F3', 'violin')).toBe(false); // Below lowest open string
   });
 });

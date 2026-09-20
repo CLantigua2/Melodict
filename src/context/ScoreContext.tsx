@@ -24,8 +24,10 @@ import { InstrumentId, PlaybackState } from '@/audio/audio.types';
 import { AudioEngine } from '@/audio/AudioEngine';
 import { INITIAL_MOCK_SCORES } from '@/mock/scores.data';
 import { pitchToMidi, midiToPitch } from '@/audio/audio.constants';
+import { getOrCreateClientUserId } from '@/lib/user';
 
 export type EditTool = 'input' | 'select' | 'pan' | 'erase';
+export type BackendSaveStatus = 'saved' | 'saving' | 'error' | 'offline';
 
 export interface PlaybackSection {
   startLine: number;
@@ -69,10 +71,16 @@ export interface ScoreContextType {
   setMasterVolume: (v: number) => void;
   isInstrumentLoading: boolean;
 
+  // Tabs & Library
+  openScores: Score[];
+  openScoreIds: string[];
+
   // Actions
   loadScoreById: (id: string) => void;
   createNewScore: () => void;
+  closeTab: (id: string) => void;
   closeScore: (id: string) => void;
+  deleteScoreFromLibrary: (id: string) => Promise<void>;
   updateScoreMeta: (meta: Partial<Score>) => void;
   toggleLayoutMode: () => void;
   addNote: (
@@ -121,6 +129,11 @@ export interface ScoreContextType {
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+
+  // Backend persistence & anonymous user
+  userId: string;
+  saveStatus: BackendSaveStatus;
+  saveScoreToBackend: (scoreToSave?: Score) => Promise<void>;
 }
 
 const ScoreContext = createContext<ScoreContextType | null>(null);
@@ -225,9 +238,79 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [masterVolume, setMasterVolumeState] = useState<number>(0.8);
   const [isInstrumentLoading, setIsInstrumentLoading] = useState<boolean>(false);
 
+  // User ID & Backend Sync
+  const [userId, setUserId] = useState<string>('');
+  const [saveStatus, setSaveStatus] = useState<BackendSaveStatus>('saved');
+  const isInitialLoadRef = useRef(true);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedJsonRef = useRef<string>('');
+  const scoreRef = useRef<Score>(score);
+  scoreRef.current = score;
+  const scoresListRef = useRef<Score[]>(scoresList);
+  scoresListRef.current = scoresList;
+
+  // Open tabs tracking
+  const [openScoreIds, setOpenScoreIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('melodict_open_tabs');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      } catch {}
+    }
+    return INITIAL_MOCK_SCORES.map((s) => s.id);
+  });
+
   const playbackTimerRef = useRef<number | null>(null);
   const playbackStartTimeRef = useRef<number>(0);
   const playbackStartBeatRef = useRef<number>(0);
+
+  // Core Playback State Controllers
+  const stopPlayback = useCallback(() => {
+    if (playbackTimerRef.current) {
+      cancelAnimationFrame(playbackTimerRef.current);
+      playbackTimerRef.current = null;
+    }
+    playbackTimingsRef.current = null;
+    AudioEngine.stopMetronome();
+    AudioEngine.stopAll();
+    setPlaybackState('idle');
+    setActiveMidiNotes([]);
+  }, []);
+
+  const rewindToBeginning = useCallback(() => {
+    if (playbackTimerRef.current) {
+      cancelAnimationFrame(playbackTimerRef.current);
+      playbackTimerRef.current = null;
+    }
+    playbackTimingsRef.current = null;
+    AudioEngine.stopMetronome();
+    AudioEngine.stopAll();
+    setPlaybackState('idle');
+    setPlayheadLine(0);
+    setPlayheadMeasure(0);
+    setPlayheadBeat(0);
+    setActiveMidiNotes([]);
+  }, []);
+
+  const setPlayheadPosition = useCallback((line: number, measure: number, beat: number = 0) => {
+    if (playbackTimerRef.current) {
+      cancelAnimationFrame(playbackTimerRef.current);
+      playbackTimerRef.current = null;
+    }
+    playbackTimingsRef.current = null;
+    AudioEngine.stopMetronome();
+    AudioEngine.stopAll();
+    setPlaybackState('idle');
+    setPlayheadLine(line);
+    setPlayheadMeasure(measure);
+    setPlayheadBeat(beat);
+    setActiveMidiNotes([]);
+  }, []);
 
   const schedulePlaybackMetronome = useCallback((fromCurrentTime: boolean = false) => {
     const timings = playbackTimingsRef.current;
@@ -336,11 +419,151 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setScoresList((prev) => prev.map((s) => (s.id === newScore.id ? newScore : s)));
   }, [historyIndex]);
 
-  // Initialize AudioEngine on first instrument change or mount
+  // Initialize AudioEngine and fetch backend user scores
   useEffect(() => {
     changeInstrument(score.instrumentId);
-    pushHistory(score);
+
+    const uid = getOrCreateClientUserId();
+    setUserId(uid);
+
+    async function initUserScores() {
+      try {
+        if (typeof fetch !== 'undefined') {
+          const res = await fetch('/api/scores', {
+            headers: { 'x-user-id': uid },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+              const normalized: Score[] = json.data.map(normalizeScore);
+              setScoresList(normalized);
+
+              // Restore open tabs from localStorage or default to active + first few
+              let savedOpenTabs: string[] = [];
+              try {
+                const stored = localStorage.getItem('melodict_open_tabs');
+                if (stored) {
+                  const parsed = JSON.parse(stored);
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    savedOpenTabs = parsed.filter((id) => normalized.some((s) => s.id === id));
+                  }
+                }
+              } catch {}
+
+              if (savedOpenTabs.length === 0) {
+                savedOpenTabs = normalized.slice(0, 3).map((s) => s.id);
+              }
+
+              setOpenScoreIds(savedOpenTabs);
+
+              const initialActive =
+                normalized.find((s) => s.id === savedOpenTabs[0]) || normalized[0];
+              setScore(initialActive);
+              lastSavedJsonRef.current = JSON.stringify(initialActive);
+              pushHistory(initialActive);
+              setSaveStatus('saved');
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Backend scores fetch error, fallback to local scores:', err);
+        setSaveStatus('offline');
+      }
+      lastSavedJsonRef.current = JSON.stringify(score);
+      pushHistory(score);
+    }
+
+    initUserScores();
   }, []);
+
+  const saveScoreToBackend = useCallback(
+    async (scoreToSave?: Score) => {
+      const target = scoreToSave || scoreRef.current;
+      const uid = userId || getOrCreateClientUserId();
+      if (!target || !uid || typeof fetch === 'undefined') return;
+
+      const currentJson = JSON.stringify(target);
+      if (currentJson === lastSavedJsonRef.current) {
+        setSaveStatus('saved');
+        return;
+      }
+
+      setSaveStatus('saving');
+      try {
+        const res = await fetch(`/api/scores/${encodeURIComponent(target.id)}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': uid,
+          },
+          body: currentJson,
+        });
+        if (res.ok) {
+          lastSavedJsonRef.current = currentJson;
+          setSaveStatus('saved');
+          // Ensure scoresList is updated with target
+          setScoresList((prev) => prev.map((s) => (s.id === target.id ? target : s)));
+        } else {
+          setSaveStatus('error');
+        }
+      } catch (err) {
+        console.warn('Backend auto-save error:', err);
+        setSaveStatus('offline');
+      }
+    },
+    [userId]
+  );
+
+  // Debounced auto-save when active score changes
+  useEffect(() => {
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    const currentJson = JSON.stringify(score);
+    if (currentJson === lastSavedJsonRef.current) {
+      return;
+    }
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    setSaveStatus('saving');
+    saveTimeoutRef.current = setTimeout(() => {
+      saveScoreToBackend(score);
+    }, 1000);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [score, saveScoreToBackend]);
+
+  // Keep scoresList in sync with active score edits so Library always reflects current state
+  useEffect(() => {
+    setScoresList((prev) => {
+      const exists = prev.some((s) => s.id === score.id);
+      if (!exists) return [score, ...prev];
+      return prev.map((s) => (s.id === score.id ? score : s));
+    });
+  }, [score]);
+
+  // Derived open scores for the tab bar
+  const openScores = useMemo(() => {
+    const scoreMap = new Map(scoresList.map((s) => [s.id, s]));
+    const list = openScoreIds
+      .map((id) => (id === score.id ? score : scoreMap.get(id)))
+      .filter(Boolean) as Score[];
+
+    if (list.length === 0 && score) {
+      return [score];
+    }
+    return list;
+  }, [scoresList, openScoreIds, score]);
 
   const changeInstrument = async (id: InstrumentId) => {
     setIsInstrumentLoading(true);
@@ -405,20 +628,56 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     });
   }, [pushHistory]);
 
-  const loadScoreById = (id: string) => {
-    const found = scoresList.find((s) => s.id === id);
-    if (found) {
-      stopPlayback();
-      const cloned = normalizeScore(JSON.parse(JSON.stringify(found)));
-      setScore(cloned);
-      changeInstrument(cloned.instrumentId);
-      setHistory([cloned]);
-      setHistoryIndex(0);
-      setSelectedNoteId(null);
-    }
-  };
+  const loadScoreById = useCallback(
+    (id: string) => {
+      // 1. Flush pending save of current score if changed
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      const currentScore = scoreRef.current;
+      if (currentScore && JSON.stringify(currentScore) !== lastSavedJsonRef.current) {
+        saveScoreToBackend(currentScore);
+      }
 
-  const createNewScore = () => {
+      // 2. Ensure id is in openScoreIds
+      setOpenScoreIds((prev) => {
+        const next = prev.includes(id) ? prev : [...prev, id];
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('melodict_open_tabs', JSON.stringify(next));
+          } catch {}
+        }
+        return next;
+      });
+
+      // 3. Find and load score
+      const found = scoresListRef.current.find((s) => s.id === id);
+      if (found) {
+        stopPlayback();
+        const cloned = normalizeScore(JSON.parse(JSON.stringify(found)));
+        lastSavedJsonRef.current = JSON.stringify(cloned);
+        setScore(cloned);
+        changeInstrument(cloned.instrumentId);
+        setHistory([cloned]);
+        setHistoryIndex(0);
+        setSelectedNoteId(null);
+      }
+    },
+    [saveScoreToBackend, stopPlayback]
+  );
+
+  const createNewScore = useCallback(() => {
+    // 1. Flush pending save of current score
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    const currentScore = scoreRef.current;
+    if (currentScore && JSON.stringify(currentScore) !== lastSavedJsonRef.current) {
+      saveScoreToBackend(currentScore);
+    }
+
     stopPlayback();
     const newScore: Score = normalizeScore({
       id: `score-${Date.now()}`,
@@ -459,21 +718,139 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       measures: [],
     });
 
-    setScoresList((prev) => [...prev, newScore]);
-    setScore(newScore);
-    pushHistory(newScore);
-    setSelectedNoteId(null);
-  };
+    const newScoreJson = JSON.stringify(newScore);
+    lastSavedJsonRef.current = newScoreJson;
 
-  const closeScore = (id: string) => {
-    if (scoresList.length <= 1) return;
-    const remaining = scoresList.filter((s) => s.id !== id);
-    setScoresList(remaining);
-    if (score.id === id) {
-      const nextScore = remaining[0];
-      loadScoreById(nextScore.id);
+    // Add to library
+    setScoresList((prev) => [newScore, ...prev.filter((s) => s.id !== newScore.id)]);
+
+    // Add to open tabs
+    setOpenScoreIds((prev) => {
+      const next = prev.includes(newScore.id) ? prev : [...prev, newScore.id];
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('melodict_open_tabs', JSON.stringify(next));
+        } catch {}
+      }
+      return next;
+    });
+
+    setScore(newScore);
+    changeInstrument(newScore.instrumentId);
+    setHistory([newScore]);
+    setHistoryIndex(0);
+    setSelectedNoteId(null);
+
+    // Save newly created score to backend
+    const uid = userId || getOrCreateClientUserId();
+    if (uid && typeof fetch !== 'undefined') {
+      fetch('/api/scores', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': uid,
+        },
+        body: newScoreJson,
+      }).catch((e) => console.warn('Backend score creation sync error:', e));
     }
-  };
+  }, [userId, stopPlayback, saveScoreToBackend]);
+
+  const closeTab = useCallback(
+    (id: string) => {
+      // 1. If only 1 tab is open, do not close it
+      if (openScoreIds.length <= 1) return;
+
+      // 2. Flush pending save if closing the active score
+      if (id === scoreRef.current.id) {
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current);
+          saveTimeoutRef.current = null;
+        }
+        const currentScore = scoreRef.current;
+        if (currentScore && JSON.stringify(currentScore) !== lastSavedJsonRef.current) {
+          saveScoreToBackend(currentScore);
+        }
+      }
+
+      // 3. Remove from open tabs only (KEEPS score saved in library and on backend!)
+      const remainingOpen = openScoreIds.filter((tabId) => tabId !== id);
+      setOpenScoreIds(remainingOpen);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('melodict_open_tabs', JSON.stringify(remainingOpen));
+        } catch {}
+      }
+
+      // 4. If closing active tab, switch to another open tab
+      if (scoreRef.current.id === id) {
+        const nextTabId = remainingOpen[remainingOpen.length - 1];
+        const nextScore = scoresListRef.current.find((s) => s.id === nextTabId);
+        if (nextScore) {
+          stopPlayback();
+          const cloned = normalizeScore(JSON.parse(JSON.stringify(nextScore)));
+          lastSavedJsonRef.current = JSON.stringify(cloned);
+          setScore(cloned);
+          changeInstrument(cloned.instrumentId);
+          setHistory([cloned]);
+          setHistoryIndex(0);
+          setSelectedNoteId(null);
+        }
+      }
+    },
+    [openScoreIds, saveScoreToBackend, stopPlayback]
+  );
+
+  // Alias for backward compatibility
+  const closeScore = closeTab;
+
+  const deleteScoreFromLibrary = useCallback(
+    async (id: string) => {
+      if (scoresList.length <= 1) return;
+
+      // 1. Remove from scoresList
+      const remainingScores = scoresList.filter((s) => s.id !== id);
+      setScoresList(remainingScores);
+
+      // 2. Remove from openScoreIds if open
+      const remainingOpen = openScoreIds.filter((tabId) => tabId !== id);
+      const updatedOpen = remainingOpen.length > 0 ? remainingOpen : [remainingScores[0].id];
+      setOpenScoreIds(updatedOpen);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('melodict_open_tabs', JSON.stringify(updatedOpen));
+        } catch {}
+      }
+
+      // 3. If deleted score was active, switch to next open score
+      if (scoreRef.current.id === id) {
+        const nextScore = remainingScores.find((s) => s.id === updatedOpen[0]) || remainingScores[0];
+        if (nextScore) {
+          stopPlayback();
+          const cloned = normalizeScore(JSON.parse(JSON.stringify(nextScore)));
+          lastSavedJsonRef.current = JSON.stringify(cloned);
+          setScore(cloned);
+          changeInstrument(cloned.instrumentId);
+          setHistory([cloned]);
+          setHistoryIndex(0);
+          setSelectedNoteId(null);
+        }
+      }
+
+      // 4. Delete permanently on backend
+      const uid = userId || getOrCreateClientUserId();
+      if (uid && typeof fetch !== 'undefined') {
+        try {
+          await fetch(`/api/scores/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+            headers: { 'x-user-id': uid },
+          });
+        } catch (err) {
+          console.warn('Backend score deletion error:', err);
+        }
+      }
+    },
+    [scoresList, openScoreIds, userId, stopPlayback]
+  );
 
   // Note Selection and Updates
   const updateNote = (noteId: string, updates: Partial<ScoreNote>) => {
@@ -1092,49 +1469,6 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  // Multi-Line Playback Engine Implementation
-  const stopPlayback = useCallback(() => {
-    if (playbackTimerRef.current) {
-      cancelAnimationFrame(playbackTimerRef.current);
-      playbackTimerRef.current = null;
-    }
-    playbackTimingsRef.current = null;
-    AudioEngine.stopMetronome();
-    AudioEngine.stopAll();
-    setPlaybackState('idle');
-    setActiveMidiNotes([]);
-  }, []);
-
-  const rewindToBeginning = useCallback(() => {
-    if (playbackTimerRef.current) {
-      cancelAnimationFrame(playbackTimerRef.current);
-      playbackTimerRef.current = null;
-    }
-    playbackTimingsRef.current = null;
-    AudioEngine.stopMetronome();
-    AudioEngine.stopAll();
-    setPlaybackState('idle');
-    setPlayheadLine(0);
-    setPlayheadMeasure(0);
-    setPlayheadBeat(0);
-    setActiveMidiNotes([]);
-  }, []);
-
-  const setPlayheadPosition = useCallback((line: number, measure: number, beat: number = 0) => {
-    if (playbackTimerRef.current) {
-      cancelAnimationFrame(playbackTimerRef.current);
-      playbackTimerRef.current = null;
-    }
-    playbackTimingsRef.current = null;
-    AudioEngine.stopMetronome();
-    AudioEngine.stopAll();
-    setPlaybackState('idle');
-    setPlayheadLine(line);
-    setPlayheadMeasure(measure);
-    setPlayheadBeat(beat);
-    setActiveMidiNotes([]);
-  }, []);
-
   const togglePlayback = async () => {
     if (playbackState === 'playing') {
       if (playbackTimerRef.current) {
@@ -1384,9 +1718,15 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setMasterVolume,
         isInstrumentLoading,
 
+        // Tabs & Library
+        openScores,
+        openScoreIds,
+
         loadScoreById,
         createNewScore,
+        closeTab,
         closeScore,
+        deleteScoreFromLibrary,
         updateScoreMeta,
         toggleLayoutMode,
         addNote,
@@ -1420,6 +1760,11 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         redo,
         canUndo: historyIndex > 0,
         canRedo: historyIndex < history.length - 1,
+
+        // Backend persistence & anonymous user
+        userId,
+        saveStatus,
+        saveScoreToBackend,
       }}
     >
       {children}

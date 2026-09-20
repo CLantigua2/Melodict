@@ -1,27 +1,34 @@
 import { NextResponse } from 'next/server';
-import { INITIAL_MOCK_SCORES } from '@/mock/scores.data';
+import { getServerUserId, generateUUID } from '@/lib/user';
+import { getScoreById, saveScore, deleteScore } from '@/lib/server/storage';
 import { Score } from '@/types/score.types';
-
-let scoresStore: Score[] = [...INITIAL_MOCK_SCORES];
 
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const { id } = params;
-  const score = scoresStore.find((s) => s.id === id);
+  try {
+    const userId = getServerUserId(request) || generateUUID();
+    const { id } = params;
+    const score = await getScoreById(userId, id);
 
-  if (!score) {
+    if (!score) {
+      return NextResponse.json(
+        { success: false, error: 'Score not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: score,
+    });
+  } catch (err: any) {
     return NextResponse.json(
-      { success: false, error: 'Score not found' },
-      { status: 404 }
+      { success: false, error: err.message || 'Failed to get score' },
+      { status: 500 }
     );
   }
-
-  return NextResponse.json({
-    success: true,
-    data: score,
-  });
 }
 
 export async function PUT(
@@ -30,24 +37,13 @@ export async function PUT(
 ) {
   const { id } = params;
   try {
+    const userId = getServerUserId(request) || generateUUID();
     const body: Partial<Score> = await request.json();
-    const index = scoresStore.findIndex((s) => s.id === id);
 
-    if (index === -1) {
-      return NextResponse.json(
-        { success: false, error: 'Score not found' },
-        { status: 404 }
-      );
-    }
-
-    const updatedScore: Score = {
-      ...scoresStore[index],
+    const updatedScore = await saveScore(userId, {
       ...body,
       id,
-      updatedAt: new Date().toISOString(),
-    };
-
-    scoresStore[index] = updatedScore;
+    });
 
     return NextResponse.json({
       success: true,
@@ -66,19 +62,32 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   const { id } = params;
-  const index = scoresStore.findIndex((s) => s.id === id);
+  try {
+    const userId = getServerUserId(request);
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'User ID required' },
+        { status: 400 }
+      );
+    }
 
-  if (index === -1) {
+    const removed = await deleteScore(userId, id);
+
+    if (!removed) {
+      return NextResponse.json(
+        { success: false, error: 'Score not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: { id, deleted: true },
+    });
+  } catch (err: any) {
     return NextResponse.json(
-      { success: false, error: 'Score not found' },
-      { status: 404 }
+      { success: false, error: err.message || 'Failed to delete score' },
+      { status: 500 }
     );
   }
-
-  const removed = scoresStore.splice(index, 1)[0];
-
-  return NextResponse.json({
-    success: true,
-    data: removed,
-  });
 }

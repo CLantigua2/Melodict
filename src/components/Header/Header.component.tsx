@@ -1,16 +1,20 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Music,
   ChevronDown,
   Volume2,
   VolumeX,
   Palette,
-  Plus,
   Share2,
-  Trash2,
   Loader2,
+  Cloud,
+  CloudOff,
+  AlertCircle,
+  User,
+  Check,
+  FolderOpen,
 } from 'lucide-react';
 import { useScore } from '@/context/ScoreContext';
 import { useAppTheme } from '@/theme/ThemeProvider';
@@ -23,7 +27,6 @@ import {
   LogoBadge,
   BrandTitle,
   MvpBadge,
-  ScoreTitleInput,
   MiddleSection,
   SelectWrapper,
   StyledSelect,
@@ -33,18 +36,35 @@ import {
   VolumeSlider,
   ActionButton,
   LoadingIndicator,
+  SaveStatusBadge,
+  UserBadge,
 } from './Header.styles';
 
-export const Header: React.FC<HeaderProps> = ({ onOpenExportModal }) => {
+export const Header: React.FC<HeaderProps> = ({
+  onOpenExportModal,
+  onOpenLibraryModal,
+}) => {
   const {
     score,
     changeInstrument,
     masterVolume,
     setMasterVolume,
     isInstrumentLoading,
+    userId,
+    saveStatus,
+    scoresList,
   } = useScore();
 
   const { themeName, setThemeName } = useAppTheme();
+  const [copiedUser, setCopiedUser] = useState(false);
+
+  const handleCopyUserId = () => {
+    if (!userId || typeof navigator === 'undefined') return;
+    navigator.clipboard?.writeText(userId).then(() => {
+      setCopiedUser(true);
+      setTimeout(() => setCopiedUser(false), 2000);
+    });
+  };
 
   return (
     <HeaderContainer>
@@ -86,6 +106,45 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExportModal }) => {
       </MiddleSection>
 
       <ControlsGroup>
+        {/* Cloud Auto-Save Status */}
+        <SaveStatusBadge
+          $status={saveStatus}
+          title={
+            saveStatus === 'saved'
+              ? 'All changes automatically saved to backend cloud storage'
+              : saveStatus === 'saving'
+              ? 'Saving changes to backend...'
+              : saveStatus === 'offline'
+              ? 'Offline mode: changes cached locally'
+              : 'Error saving to backend, retrying...'
+          }
+        >
+          {saveStatus === 'saving' && <Loader2 size={12} className="animate-spin" />}
+          {saveStatus === 'saved' && <Cloud size={12} />}
+          {saveStatus === 'offline' && <CloudOff size={12} />}
+          {saveStatus === 'error' && <AlertCircle size={12} />}
+          <span style={{ textTransform: 'capitalize' }}>
+            {saveStatus === 'saving'
+              ? 'Saving...'
+              : saveStatus === 'saved'
+              ? 'Cloud Saved'
+              : saveStatus === 'offline'
+              ? 'Offline Cache'
+              : 'Sync Error'}
+          </span>
+        </SaveStatusBadge>
+
+        {/* Anonymous User UUID Pill */}
+        {userId && (
+          <UserBadge
+            onClick={handleCopyUserId}
+            title={`Anonymous User UUID: ${userId}\nClick to copy your unique ID`}
+          >
+            {copiedUser ? <Check size={12} style={{ color: '#00e5ff' }} /> : <User size={12} />}
+            <span>{copiedUser ? 'Copied ID!' : `Guest #${userId.slice(0, 6)}`}</span>
+          </UserBadge>
+        )}
+
         {/* Live Theme Experimentation */}
         <SelectWrapper>
           <StyledSelect
@@ -121,6 +180,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExportModal }) => {
             title={`Volume: ${Math.round(masterVolume * 100)}%`}
           />
         </VolumeControl>
+
+        {/* Saved Scores Library */}
+        <ActionButton
+          $variant="secondary"
+          onClick={onOpenLibraryModal}
+          title="Browse all saved scores in your library"
+        >
+          <FolderOpen size={16} />
+          <span>Library ({scoresList.length})</span>
+        </ActionButton>
 
         {/* Export / Share */}
         <ActionButton $variant="primary" onClick={onOpenExportModal} title="Export Composition">

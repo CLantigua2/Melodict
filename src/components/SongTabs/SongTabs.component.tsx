@@ -18,10 +18,10 @@ import {
 export const SongTabs: React.FC<SongTabsProps> = () => {
   const {
     score,
-    scoresList,
+    openScores,
     loadScoreById,
     createNewScore,
-    closeScore,
+    closeTab,
     updateScoreMeta,
   } = useScore();
 
@@ -29,7 +29,7 @@ export const SongTabs: React.FC<SongTabsProps> = () => {
 
   return (
     <TabsContainer>
-      {scoresList.map((s) => {
+      {openScores.map((s) => {
         const isActive = s.id === score.id;
         const isEditing = editingId === s.id && isActive;
 
@@ -78,13 +78,13 @@ export const SongTabs: React.FC<SongTabsProps> = () => {
               <TabComposerText>({s.composer})</TabComposerText>
             )}
 
-            {scoresList.length > 1 && (
+            {openScores.length > 1 && (
               <CloseTabButton
                 onClick={(e) => {
                   e.stopPropagation();
-                  closeScore(s.id);
+                  closeTab(s.id);
                 }}
-                title="Close score"
+                title="Close tab (keeps saved in Library)"
               >
                 <X size={12} />
               </CloseTabButton>

@@ -14,6 +14,7 @@ import {
 import { useScore } from '@/context/ScoreContext';
 import { useAppTheme } from '@/theme/ThemeProvider';
 import { ScoreNote, ClefType } from '@/types/score.types';
+import { isPitchInInstrumentRange, getInstrumentRange } from '@/audio/audio.constants';
 import {
   LINE_SPACING,
   STEP_Y,
@@ -1106,122 +1107,145 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
           </span>
 
           {/* Selected Note Inspector Banner */}
-          {selectedNote && (
-            <NoteInspector>
-              <span>Selected Note:</span>
-              <InspectorPill>{selectedNote.pitch}</InspectorPill>
-              <span style={{ textTransform: 'capitalize' }}>
-                {selectedNote.duration}
-                {selectedNote.dotted ? ' (Dotted)' : ''}
-              </span>
-              <SmallActionBtn
-                onClick={() => moveSelectedNotePitch(1)}
-                title="Shift Pitch Up (Arrow Up)"
-              >
-                <ChevronUp size={12} />
-              </SmallActionBtn>
-              <SmallActionBtn
-                onClick={() => moveSelectedNotePitch(-1)}
-                title="Shift Pitch Down (Arrow Down)"
-              >
-                <ChevronDown size={12} />
-              </SmallActionBtn>
-              <SmallActionBtn
-                onClick={() => moveSelectedNoteBeat(-0.5)}
-                title="Shift Beat Backward (Arrow Left)"
-              >
-                <ChevronLeft size={12} />
-              </SmallActionBtn>
-              <SmallActionBtn
-                onClick={() => moveSelectedNoteBeat(0.5)}
-                title="Shift Beat Forward (Arrow Right)"
-              >
-                <ChevronRight size={12} />
-              </SmallActionBtn>
+          {selectedNote && (() => {
+            const isPlayable = isPitchInInstrumentRange(selectedNote.pitch, score.instrumentId);
+            const instRange = getInstrumentRange(score.instrumentId || 'acoustic_grand_piano');
 
-              {/* Chord Harmony Builders */}
-              <SmallActionBtn
-                onClick={() => addChordInterval(4)}
-                title="Add Major 3rd above to form chord"
-              >
-                +3rd
-              </SmallActionBtn>
-              <SmallActionBtn
-                onClick={() => addChordInterval(7)}
-                title="Add Perfect 5th above"
-              >
-                +5th
-              </SmallActionBtn>
-              <SmallActionBtn
-                onClick={() => addTriadToSelectedNote('major')}
-                title="Add Major Triad (3rd & 5th)"
-              >
-                +Triad
-              </SmallActionBtn>
+            return (
+              <NoteInspector>
+                <span>Selected Note:</span>
+                <InspectorPill>{selectedNote.pitch}</InspectorPill>
+                <span style={{ textTransform: 'capitalize' }}>
+                  {selectedNote.duration}
+                  {selectedNote.dotted ? ' (Dotted)' : ''}
+                </span>
 
-              {/* Musical Tie Toggle */}
-              <SmallActionBtn
-                onClick={toggleTieSelectedNote}
-                style={{
-                  background: selectedNote.tied ? currentTheme.colors.surfaceActive : undefined,
-                  borderColor: selectedNote.tied ? currentTheme.colors.primary : undefined,
-                  color: selectedNote.tied ? currentTheme.colors.primary : undefined,
-                  fontWeight: selectedNote.tied ? 700 : 500,
-                }}
-                title="Toggle musical tie to next note (⌢)"
-              >
-                ⌢ Tie
-              </SmallActionBtn>
+                {!isPlayable && (
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      color: '#f43f5e',
+                      background: 'rgba(244, 63, 94, 0.15)',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      border: '1px solid rgba(244, 63, 94, 0.4)',
+                    }}
+                    title={`Note ${selectedNote.pitch} is outside playable range (${instRange.minPitch} - ${instRange.maxPitch})`}
+                  >
+                    ⚠️ Out of Range ({instRange.minPitch}–{instRange.maxPitch})
+                  </span>
+                )}
 
-              {/* Musical Dynamics Expression */}
-              <select
-                value={selectedNote.dynamic || ''}
-                onChange={(e) => setSelectedNoteDynamic((e.target.value as any) || undefined)}
-                style={{
-                  background: currentTheme.colors.surface,
-                  color: currentTheme.colors.textPrimary,
-                  border: `1px solid ${currentTheme.colors.border}`,
-                  borderRadius: '4px',
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  padding: '2px 4px',
-                  cursor: 'pointer',
-                  fontStyle: 'italic',
-                }}
-                title="Assign musical dynamic expression (p, mp, mf, f, ff)"
-              >
-                <option value="">Dyn: —</option>
-                <option value="pp">pp (pianissimo)</option>
-                <option value="p">p (piano)</option>
-                <option value="mp">mp (mezzo-piano)</option>
-                <option value="mf">mf (mezzo-forte)</option>
-                <option value="f">f (forte)</option>
-                <option value="ff">ff (fortissimo)</option>
-              </select>
+                <SmallActionBtn
+                  onClick={() => moveSelectedNotePitch(1)}
+                  title="Shift Pitch Up (Arrow Up)"
+                >
+                  <ChevronUp size={12} />
+                </SmallActionBtn>
+                <SmallActionBtn
+                  onClick={() => moveSelectedNotePitch(-1)}
+                  title="Shift Pitch Down (Arrow Down)"
+                >
+                  <ChevronDown size={12} />
+                </SmallActionBtn>
+                <SmallActionBtn
+                  onClick={() => moveSelectedNoteBeat(-0.5)}
+                  title="Shift Beat Backward (Arrow Left)"
+                >
+                  <ChevronLeft size={12} />
+                </SmallActionBtn>
+                <SmallActionBtn
+                  onClick={() => moveSelectedNoteBeat(0.5)}
+                  title="Shift Beat Forward (Arrow Right)"
+                >
+                  <ChevronRight size={12} />
+                </SmallActionBtn>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontSize: '0.72rem', color: currentTheme.colors.textMuted }}>Lyric:</span>
-                <LyricInput
-                  value={selectedNote.lyric || ''}
-                  onChange={(e) => updateSelectedNote({ lyric: e.target.value })}
-                  placeholder="Text..."
-                  title="Edit lyrics for this note"
-                />
-              </div>
-              <SmallActionBtn
-                onClick={deleteSelectedNote}
-                title="Delete Note (Delete/Backspace)"
-              >
-                <Trash2 size={12} />
-              </SmallActionBtn>
-              <SmallActionBtn
-                onClick={() => setSelectedNoteId(null)}
-                title="Deselect (Escape)"
-              >
-                <X size={12} />
-              </SmallActionBtn>
-            </NoteInspector>
-          )}
+                {/* Chord Harmony Builders */}
+                <SmallActionBtn
+                  onClick={() => addChordInterval(4)}
+                  title="Add Major 3rd above to form chord"
+                >
+                  +3rd
+                </SmallActionBtn>
+                <SmallActionBtn
+                  onClick={() => addChordInterval(7)}
+                  title="Add Perfect 5th above"
+                >
+                  +5th
+                </SmallActionBtn>
+                <SmallActionBtn
+                  onClick={() => addTriadToSelectedNote('major')}
+                  title="Add Major Triad (3rd & 5th)"
+                >
+                  +Triad
+                </SmallActionBtn>
+
+                {/* Musical Tie Toggle */}
+                <SmallActionBtn
+                  onClick={toggleTieSelectedNote}
+                  style={{
+                    background: selectedNote.tied ? currentTheme.colors.surfaceActive : undefined,
+                    borderColor: selectedNote.tied ? currentTheme.colors.primary : undefined,
+                    color: selectedNote.tied ? currentTheme.colors.primary : undefined,
+                    fontWeight: selectedNote.tied ? 700 : 500,
+                  }}
+                  title="Toggle musical tie to next note (⌢)"
+                >
+                  ⌢ Tie
+                </SmallActionBtn>
+
+                {/* Musical Dynamics Expression */}
+                <select
+                  value={selectedNote.dynamic || ''}
+                  onChange={(e) => setSelectedNoteDynamic((e.target.value as any) || undefined)}
+                  style={{
+                    background: currentTheme.colors.surface,
+                    color: currentTheme.colors.textPrimary,
+                    border: `1px solid ${currentTheme.colors.border}`,
+                    borderRadius: '4px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    padding: '2px 4px',
+                    cursor: 'pointer',
+                    fontStyle: 'italic',
+                  }}
+                  title="Assign musical dynamic expression (p, mp, mf, f, ff)"
+                >
+                  <option value="">Dyn: —</option>
+                  <option value="pp">pp (pianissimo)</option>
+                  <option value="p">p (piano)</option>
+                  <option value="mp">mp (mezzo-piano)</option>
+                  <option value="mf">mf (mezzo-forte)</option>
+                  <option value="f">f (forte)</option>
+                  <option value="ff">ff (fortissimo)</option>
+                </select>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: '0.72rem', color: currentTheme.colors.textMuted }}>Lyric:</span>
+                  <LyricInput
+                    value={selectedNote.lyric || ''}
+                    onChange={(e) => updateSelectedNote({ lyric: e.target.value })}
+                    placeholder="Text..."
+                    title="Edit lyrics for this note"
+                  />
+                </div>
+                <SmallActionBtn
+                  onClick={deleteSelectedNote}
+                  title="Delete Note (Delete/Backspace)"
+                >
+                  <Trash2 size={12} />
+                </SmallActionBtn>
+                <SmallActionBtn
+                  onClick={() => setSelectedNoteId(null)}
+                  title="Deselect (Escape)"
+                >
+                  <X size={12} />
+                </SmallActionBtn>
+              </NoteInspector>
+            );
+          })()}
         </div>
 
         <ZoomControls>

@@ -214,3 +214,52 @@ export const LoadingIndicator = styled.div`
     50% { opacity: 1; }
   }
 `;
+
+export const SaveStatusBadge = styled.div<{ $status: 'saved' | 'saving' | 'error' | 'offline' }>`
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: ${({ theme }) => theme.radii.xs};
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid
+    ${({ $status, theme }) =>
+      $status === 'saved'
+        ? theme.colors.border
+        : $status === 'saving'
+        ? theme.colors.primary
+        : $status === 'error'
+        ? theme.colors.accentRose
+        : theme.colors.border};
+  background: ${({ theme }) => theme.colors.surfaceElevated};
+  color: ${({ $status, theme }) =>
+    $status === 'saved'
+      ? theme.colors.textSecondary
+      : $status === 'saving'
+      ? theme.colors.primary
+      : $status === 'error'
+      ? theme.colors.accentRose
+      : theme.colors.textMuted};
+  transition: all 0.2s ease;
+`;
+
+export const UserBadge = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: ${({ theme }) => theme.radii.xs};
+  background: ${({ theme }) => theme.colors.surfaceElevated};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.primary};
+    color: ${({ theme }) => theme.colors.primary};
+  }
+`;

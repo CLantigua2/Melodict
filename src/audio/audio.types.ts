@@ -16,6 +16,14 @@ export interface InstrumentOption {
   description: string;
 }
 
+export interface InstrumentRange {
+  minPitch: string;
+  maxPitch: string;
+  minMidi: number;
+  maxMidi: number;
+  writtenTranspositionSemitones?: number; // e.g. -2 for Bb clarinet
+}
+
 export interface NotePlayOptions {
   pitch: string | number; // e.g. "C4", "F#5", or MIDI 60
   duration?: number;      // in seconds

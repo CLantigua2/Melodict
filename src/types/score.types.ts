@@ -53,6 +53,7 @@ export interface Score {
   keySignature: string; // e.g. "C", "G", "F", "D"
   instrumentId: InstrumentId;
   layoutMode?: ScoreLayoutMode; // 'single' = Lead Sheet / Melody, 'grand' = Piano Grand Staff (RH & LH)
+  userId?: string;
   lines: ScoreLine[];
   measures: Measure[];
   createdAt: string;
@@ -68,6 +69,7 @@ export interface CreateScoreDTO {
   keySignature?: string;
   instrumentId?: InstrumentId;
   layoutMode?: ScoreLayoutMode;
+  userId?: string;
   lines?: ScoreLine[];
   measures?: Measure[];
 }

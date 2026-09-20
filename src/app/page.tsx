@@ -8,6 +8,7 @@ import { TransportToolbar } from '@/components/TransportToolbar';
 import { NotationCanvas } from '@/components/NotationCanvas';
 import { VirtualPiano } from '@/components/VirtualPiano';
 import { ExportModal } from '@/components/ExportModal';
+import { ScoreLibraryModal } from '@/components/ScoreLibraryModal';
 import { useScore } from '@/context/ScoreContext';
 
 const AppContainer = styled.main`
@@ -29,6 +30,7 @@ const WorkspaceArea = styled.div`
 
 export default function MelodictStudioPage() {
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const { togglePlayback, stopPlayback, deleteSelectedNote, selectedNoteId } = useScore();
 
   // Global hotkeys
@@ -63,7 +65,10 @@ export default function MelodictStudioPage() {
   return (
     <AppContainer>
       {/* Top Navigation & Status Bar */}
-      <Header onOpenExportModal={() => setIsExportOpen(true)} />
+      <Header
+        onOpenExportModal={() => setIsExportOpen(true)}
+        onOpenLibraryModal={() => setIsLibraryOpen(true)}
+      />
 
       {/* Song Tabs Bar */}
       <SongTabs />
@@ -84,6 +89,12 @@ export default function MelodictStudioPage() {
       <ExportModal
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
+      />
+
+      {/* Score Library & Saved Songs Modal */}
+      <ScoreLibraryModal
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
       />
     </AppContainer>
   );
