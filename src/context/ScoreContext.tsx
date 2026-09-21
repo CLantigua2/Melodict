@@ -616,6 +616,8 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const toggleLayoutMode = useCallback(() => {
+    // BUG: When switching to Grand staff, bass notes are pushed to treble clef
+    // Each note should remain stored to their own clef but not deleted when switching layout
     setScore((prev) => {
       const nextMode = prev.layoutMode === 'grand' ? 'single' : 'grand';
       const next = normalizeScore({

@@ -726,6 +726,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
       staffTop,
       clef
     );
+    
 
     return (
       <g id={`${staffPrefix}-measure-notes-${measureIndex}`}>
@@ -819,6 +820,18 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
 
         {/* Measure Notes */}
         {notes.map((note) => {
+          /*
+          * When switching from grand staff to single staff, we may need to hide bass clef notes if not in grand staff context.
+          * Currently, we push bass clef notes to treble clef when not in grand staff context.
+          * This causes it to no longer be considered a bass clef note which makes it difficult to resolve.
+          */
+          const isBassClef = clef === 'bass';
+          console.log({clef, isBassClef, isGrandStaff})
+          const shouldNotShowBassClefNote = isBassClef && !isGrandStaff
+          console.log({shouldNotShowBassClefNote})
+          if (shouldNotShowBassClefNote) {
+            return null;
+          }
           const noteY = calculateNoteY(note.pitch, staffTop, clef);
           const noteX =
             measureLeft +
@@ -834,7 +847,8 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
             ? currentTheme.colors.sheetNoteSelected
             : currentTheme.colors.sheetNote;
 
-          return (
+
+          return !shouldNotShowBassClefNote && (
             <g
               key={note.id}
               onClick={(e) => handleNoteClick(e, note.id)}
