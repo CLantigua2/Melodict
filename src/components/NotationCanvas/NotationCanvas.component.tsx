@@ -220,6 +220,9 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
   const draggingNoteRef = useRef<DraggingNoteState | null>(null);
   draggingNoteRef.current = draggingNote;
   const justDraggedRef = useRef<boolean>(false);
+    // Determine SVG total dimensions based on lines, measures and layout mode
+  const isGrandStaff = score.layoutMode === 'grand';
+  const systemHeight = isGrandStaff ? GRAND_LINE_HEIGHT : LINE_HEIGHT;
 
   // Snapping / Grid calculator
   const calculateGridPosition = useCallback(
@@ -228,9 +231,6 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
       const rect = svgRef.current.getBoundingClientRect();
       const mouseX = (clientX - rect.left) / zoom;
       const mouseY = (clientY - rect.top) / zoom;
-
-      const isGrandStaff = score.layoutMode === 'grand';
-      const systemHeight = isGrandStaff ? GRAND_LINE_HEIGHT : LINE_HEIGHT;
 
       // Determine target line based on vertical boundary between consecutive systems
       let lineIndex = 0;
@@ -341,8 +341,6 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
       previewNote(note.pitch);
     }
 
-    const isGrandStaff = score.layoutMode === 'grand';
-    const systemHeight = isGrandStaff ? GRAND_LINE_HEIGHT : LINE_HEIGHT;
     const systemTop = STAFF_PADDING_TOP + (note.lineIndex ?? 0) * systemHeight;
     const staffTop =
       isGrandStaff && note.clef === 'bass'
@@ -376,6 +374,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
   };
 
   // Window listeners for smooth note drag across entire page
+  // BUG: This doesn't work at all
   useEffect(() => {
     if (!draggingNote) return;
 
@@ -460,10 +459,6 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
     };
   }, [draggingNote !== null, score, zoom, calculateGridPosition, moveNote, previewNote, setSelectedNoteId]);
 
-  // Determine SVG total dimensions based on lines, measures and layout mode
-  const isGrandStaff = score.layoutMode === 'grand';
-  const systemHeight = isGrandStaff ? GRAND_LINE_HEIGHT : LINE_HEIGHT;
-
   const maxMeasuresInAnyLine = Math.max(
     1,
     ...score.lines.map((l) => l.measures.length)
@@ -495,6 +490,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
       pitch = `${pitch[0]}b${pitch.slice(1)}`;
     }
 
+    // Ghost notes are used to show a preview of where the note will be placed before clicking
     setGhostNote({
       visible: true,
       lineIndex: pos.lineIndex,
@@ -718,15 +714,17 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
     beatsPerMeasure: number,
     staffPrefix: string
   ) => {
+
+    const displayNotes = notes.filter(n => !(n.clef === 'bass' && !isGrandStaff));
+
     const { chordGroups, beamGroups } = groupMeasureChordsAndBeams(
-      notes,
+      displayNotes,
       measureLeft,
       MEASURE_WIDTH,
       beatsPerMeasure,
       staffTop,
       clef
     );
-    
 
     return (
       <g id={`${staffPrefix}-measure-notes-${measureIndex}`}>
@@ -819,19 +817,12 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
         })}
 
         {/* Measure Notes */}
-        {notes.map((note) => {
+        {displayNotes.map((note) => {
           /*
           * When switching from grand staff to single staff, we may need to hide bass clef notes if not in grand staff context.
           * Currently, we push bass clef notes to treble clef when not in grand staff context.
           * This causes it to no longer be considered a bass clef note which makes it difficult to resolve.
           */
-          const isBassClef = clef === 'bass';
-          console.log({clef, isBassClef, isGrandStaff})
-          const shouldNotShowBassClefNote = isBassClef && !isGrandStaff
-          console.log({shouldNotShowBassClefNote})
-          if (shouldNotShowBassClefNote) {
-            return null;
-          }
           const noteY = calculateNoteY(note.pitch, staffTop, clef);
           const noteX =
             measureLeft +
@@ -848,7 +839,7 @@ export const NotationCanvas: React.FC<NotationCanvasProps> = () => {
             : currentTheme.colors.sheetNote;
 
 
-          return !shouldNotShowBassClefNote && (
+          return (
             <g
               key={note.id}
               onClick={(e) => handleNoteClick(e, note.id)}
