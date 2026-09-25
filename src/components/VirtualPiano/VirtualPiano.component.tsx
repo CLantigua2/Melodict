@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Volume2, Music2 } from 'lucide-react';
-import { useScore } from '@/context/ScoreContext';
+import { useScore } from '@/context/ScoreContext/';
 import { AudioEngine } from '@/audio/AudioEngine';
 import { DEFAULT_PIANO_KEYS } from './VirtualPiano.constants';
 import { VirtualPianoProps } from './VirtualPiano.types';

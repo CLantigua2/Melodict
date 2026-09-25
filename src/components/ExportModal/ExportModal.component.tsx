@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, Download, Check } from 'lucide-react';
-import { useScore } from '@/context/ScoreContext';
+import { useScore } from '@/context/ScoreContext/';
 import { generateMidiFile } from '@/audio/midiExport';
 import { EXPORT_FORMATS } from './ExportModal.constants';
 import { ExportModalProps } from './ExportModal.types';

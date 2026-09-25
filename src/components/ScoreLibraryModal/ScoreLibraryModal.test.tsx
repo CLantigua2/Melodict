@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScoreLibraryModal } from './ScoreLibraryModal.component';
-import { ScoreProvider } from '../../context/ScoreContext';
+import { ScoreProvider } from '../../context/ScoreContext/';
 import { AppThemeProvider } from '../../theme/ThemeProvider';
 
 describe('ScoreLibraryModal component', () => {

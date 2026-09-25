@@ -16,8 +16,8 @@ import {
   Check,
   FolderOpen,
 } from 'lucide-react';
-import { useScore } from '@/context/ScoreContext';
-import { useAppTheme } from '@/theme/ThemeProvider';
+import { useScore } from '@/context/ScoreContext/';
+import { useAppTheme } from '@/context/ThemeContext/';
 import { INSTRUMENT_OPTIONS } from '@/audio/audio.constants';
 import { HeaderProps } from './Header.types';
 import { THEME_OPTIONS } from './Header.constants';

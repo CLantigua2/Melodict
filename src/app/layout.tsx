@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import StyledComponentsRegistry from '@/lib/registry';
-import { AppThemeProvider } from '@/theme/ThemeProvider';
-import { ScoreProvider } from '@/context/ScoreContext';
+import { AppThemeProvider } from '@/context/ThemeContext/';
+import { ScoreProvider } from '@/context/ScoreContext/';
 
 export const metadata: Metadata = {
   title: 'Melodict | Interactive Sheet Music & Virtual Instrument Studio',

@@ -9,7 +9,7 @@ import { NotationCanvas } from '@/components/NotationCanvas';
 import { VirtualPiano } from '@/components/VirtualPiano';
 import { ExportModal } from '@/components/ExportModal';
 import { ScoreLibraryModal } from '@/components/ScoreLibraryModal';
-import { useScore } from '@/context/ScoreContext';
+import { useScore } from '@/context/ScoreContext/';
 
 const AppContainer = styled.main`
   display: flex;

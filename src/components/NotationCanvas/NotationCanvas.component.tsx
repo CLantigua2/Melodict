@@ -11,8 +11,8 @@ import {
   X,
   Music,
 } from 'lucide-react';
-import { useScore } from '@/context/ScoreContext';
-import { useAppTheme } from '@/theme/ThemeProvider';
+import { useScore } from '@/context/ScoreContext/';
+import { useAppTheme } from '@/context/ThemeContext/ThemeProvider';
 import { ScoreNote, ClefType } from '@/types/score.types';
 import { isPitchInInstrumentRange, getInstrumentRange } from '@/audio/audio.constants';
 import {

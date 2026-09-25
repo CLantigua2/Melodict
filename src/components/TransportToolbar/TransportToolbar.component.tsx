@@ -20,7 +20,7 @@ import {
   ChevronsLeft,
   X,
 } from 'lucide-react';
-import { useScore } from '@/context/ScoreContext';
+import { useScore } from '@/context/ScoreContext/';
 import {
   DURATION_OPTIONS,
   ACCIDENTAL_OPTIONS,

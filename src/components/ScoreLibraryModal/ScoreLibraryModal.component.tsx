@@ -12,7 +12,7 @@ import {
   Music2,
   FileText,
 } from 'lucide-react';
-import { useScore } from '@/context/ScoreContext';
+import { useScore } from '@/context/ScoreContext/';
 import { ScoreLibraryModalProps } from './ScoreLibraryModal.types';
 import {
   ModalBackdrop,

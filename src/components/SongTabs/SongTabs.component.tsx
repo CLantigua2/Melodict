@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Music, Plus, X } from 'lucide-react';
-import { useScore } from '@/context/ScoreContext';
+import { useScore } from '@/context/ScoreContext/';
 import { SongTabsProps } from './SongTabs.types';
 import {
   TabsContainer,
