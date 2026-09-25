@@ -1514,6 +1514,8 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const flatNotes: FlatNote[] = [];
     let runningGlobalBeat = 0;
 
+
+    // NOTE: is this even used? It doesn't seem to run when I play the music
     score.lines.forEach((l) => {
       l.measures.forEach((m) => {
         // Quarter note beat count for this measure = numerator * (4 / denominator)
@@ -1525,7 +1527,11 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           beatCount,
         });
 
+        console.log({score})
         m.notes.forEach((n) => {
+          // Skip playing bass clef notes if the layout mode is not grand staff
+          if (n.clef === 'bass' && score?.layoutMode !== "grand") return;
+          
           let durationBeats = 1;
           if (n.duration === 'whole') durationBeats = 4;
           else if (n.duration === 'half') durationBeats = 2;
@@ -1587,6 +1593,7 @@ export const ScoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const scheduledNotes = flatNotes.filter(
       (n) => n.globalBeat >= startGlobalBeat && n.globalBeat < endGlobalBeat
     );
+
     scheduledNotes.forEach((n) => {
       if (n.isRest) return;
       const beatOffset = n.globalBeat - startGlobalBeat;
